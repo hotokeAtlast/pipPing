@@ -1,0 +1,27 @@
+[Unit]
+Description=pipPing price alerts (frontend + API + alert engine)
+Documentation=https://github.com/hotokeAtlast/pipPing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pipping
+Group=pipping
+WorkingDirectory=/opt/pipping
+EnvironmentFile=/opt/pipping/.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Modest hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/pipping/server/data /opt/pipping/dist
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
