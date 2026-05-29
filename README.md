@@ -7,7 +7,7 @@ Self-hosted, unlimited price alerts for forex, gold and crypto — pushed to Tel
 - **Storage:** SQLite via Node's built-in `node:sqlite` (zero native deps, **requires Node 24.15+**)
 - **Price data:** Binance (crypto, free) + Twelve Data (forex/gold, free tier)
 - **Notifications:** Telegram bot (free, unlimited)
-- **Deploy target:** GCP e2-micro Always-Free VM (or anything that runs Node 24.15+)
+- **Deploy target:** Render free tier (one-click via `render.yaml`), or any host running Node 24.15+
 
 ## Quick start (local dev)
 
@@ -27,7 +27,7 @@ npm run build              # builds the frontend into dist/
 npm start                  # serves dist/ + /api on $PORT (default 8080)
 ```
 
-See [DEPLOY.md](./DEPLOY.md) for the full GCP VM walkthrough.
+See [DEPLOY.md](./DEPLOY.md) for the Render free-tier walkthrough.
 
 ## How alerts fire
 

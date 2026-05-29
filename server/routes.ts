@@ -36,6 +36,19 @@ export function registerRoutes(app: express.Express, db: any) {
     });
   });
 
+  /**
+   * Lightweight keep-alive ping for free hosts that spin down idle services
+   * (e.g. Render free tier idles after 15 min of inactivity).
+   *
+   * Hit this every ~10 min from a free cron service like cron-job.org:
+   *   https://<your-render-host>.onrender.com/api/ping
+   *
+   * Intentionally does NO DB work, NO disk IO, no JSON encoding work.
+   */
+  r.get('/ping', (_req, res) => {
+    res.type('text/plain').send('pong');
+  });
+
   r.get('/prices', (_req, res) => {
     const rows = db.prepare('SELECT * FROM price_cache').all();
     res.json(
