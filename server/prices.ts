@@ -23,12 +23,18 @@ const BINANCE_MAP: Record<string, string> = {
 };
 
 // Internal asset id -> Twelve Data symbol (BASE/QUOTE format).
-const TD_MAP: Record<string, string> = {
+// Exported so the WebSocket client can reuse the mapping.
+export const TD_MAP: Record<string, string> = {
   EURUSD: 'EUR/USD',
   USDJPY: 'USD/JPY',
   AUDJPY: 'AUD/JPY',
   XAUUSD: 'XAU/USD',
 };
+
+// Reverse lookup: TD symbol -> internal asset id (for WebSocket ticks).
+export const TD_REVERSE_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(TD_MAP).map(([k, v]) => [v, k]),
+);
 
 export async function fetchCryptoPrices(assetIds: string[]): Promise<Quote[]> {
   const targets = assetIds.filter((id) => BINANCE_MAP[id]);

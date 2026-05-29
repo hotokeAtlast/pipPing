@@ -14,22 +14,21 @@
 import express, { Router } from 'express';
 import { rowToAlert, rowToLog } from './db.js';
 import { sendTelegram } from './telegram.js';
-import { getPollIntervals } from './engine.js';
+import { getEngineStatus } from './engine.js';
 
 export function registerRoutes(app: express.Express, db: any) {
   const r = Router();
 
   r.get('/health', (_req, res) => {
-    const { cryptoMs, tdMs } = getPollIntervals();
+    const { cryptoMs, tdWsConnected } = getEngineStatus();
     res.json({
       ok: true,
       hasTelegramToken: !!process.env.TELEGRAM_BOT_TOKEN,
       hasDefaultChatId: !!process.env.TELEGRAM_CHAT_ID,
       hasTwelveDataKey: !!process.env.TWELVE_DATA_API_KEY,
       pollIntervalCryptoMs: cryptoMs,
-      pollIntervalTdMs: tdMs,
-      // legacy field kept for any old client
-      pollIntervalMs: tdMs,
+      tdMode: 'websocket',
+      tdWsConnected,
     });
   });
 

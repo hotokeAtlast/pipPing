@@ -38,8 +38,8 @@ export default function App() {
     hasDefaultChatId: boolean;
     hasTwelveDataKey: boolean;
     pollIntervalCryptoMs: number;
-    pollIntervalTdMs: number;
-    pollIntervalMs: number;
+    tdMode: 'websocket' | 'polling';
+    tdWsConnected: boolean;
   } | null>(null);
 
   // Toast queue (driven by new entries appearing in /api/logs)
@@ -394,10 +394,22 @@ export default function App() {
               <p className="leading-relaxed text-[11px]">
                 Crypto polls every{' '}
                 {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 60}s (Binance, free).
-                Forex / gold polls every{' '}
-                {health ? Math.round(health.pollIntervalTdMs / 60_000) : 10} min (Twelve Data, credit-limited).
-                When a threshold hits, the bot sends you a Telegram message. Triggered alerts
-                auto-disable to prevent spam — toggle them back on to re-arm.
+                Forex / gold come via Twelve Data WebSocket — real-time push, alerts fire within a
+                second of price crossing.{' '}
+                {health && health.hasTwelveDataKey && (
+                  <span
+                    className={
+                      health.tdWsConnected
+                        ? 'text-emerald-500 font-semibold'
+                        : 'text-rose-500 font-semibold'
+                    }
+                  >
+                    WS: {health.tdWsConnected ? 'connected' : 'disconnected'}
+                  </span>
+                )}
+              </p>
+              <p className="leading-relaxed text-[11px] pt-1">
+                Triggered alerts auto-disable to prevent spam — toggle them back on to re-arm.
               </p>
             </div>
           </div>

@@ -156,7 +156,7 @@ sudo systemctl restart pipping
 
 ## Free-tier quota math (for reference)
 
-- **Twelve Data**: 800 calls/day, 8 calls/min on free tier. With `POLL_INTERVAL_MS=120000` and all 4 forex/gold symbols batched into one call per tick: 720 calls/day. ✅ under quota.
-- **Binance**: public ticker, no auth, ~1200 weight/min limit. We use ~3 calls/tick for crypto. Negligible.
+- **Twelve Data WebSocket**: free plan allows 8 simultaneous symbol subscriptions and unlimited ticks (no per-tick credit cost). pipPing subscribes to 4 symbols by default — well within free limits.
+- **Binance**: public ticker, no auth, ~1200 weight/min limit. We use ~8 calls/tick for crypto. Negligible.
 - **GCP e2-micro**: 1 instance free in eligible regions, 30 GB disk, 1 GB egress/month. Idle pipPing uses well under the egress cap.
 - **Telegram Bot API**: free, no quota worth caring about for personal use.

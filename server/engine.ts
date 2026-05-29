@@ -1,107 +1,107 @@
 /**
- * Alert engine: polls prices, evaluates active alerts, fires Telegram messages.
+ * Alert engine.
  *
- * Two separate intervals so we don't burn Twelve Data credits on crypto:
- *   - POLL_INTERVAL_CRYPTO_MS (default 120s) -> Binance, free, fast
- *   - POLL_INTERVAL_TD_MS     (default 900s = 15 min) -> Twelve Data, credit-limited
+ * Two price sources, two latency profiles:
+ *   - Crypto via Binance: REST polling on POLL_INTERVAL_CRYPTO_MS (default 60s).
+ *   - Forex / gold via Twelve Data: real-time WebSocket push (sub-second).
  *
- * Legacy POLL_INTERVAL_MS is honoured for back-compat (sets both intervals).
+ * Both call into the shared evaluator `handleAssetPriceUpdate` which caches
+ * the price, finds matching active alerts, fires Telegram, logs, and
+ * deactivates the alert.
  */
 
-import { fetchCryptoPrices, fetchForexPrices, SUPPORTED_ASSET_IDS, categoryFor } from './prices.js';
+import { fetchCryptoPrices, SUPPORTED_ASSET_IDS, categoryFor } from './prices.js';
 import { sendTelegram } from './telegram.js';
 import { rowToAlert } from './db.js';
+import { TwelveDataWS } from './ws-twelvedata.js';
 
 const LEGACY = Number(process.env.POLL_INTERVAL_MS) || 0;
-const POLL_CRYPTO_MS = Number(process.env.POLL_INTERVAL_CRYPTO_MS) || LEGACY || 120_000;
-const POLL_TD_MS = Number(process.env.POLL_INTERVAL_TD_MS) || LEGACY || 900_000;
+const POLL_CRYPTO_MS = Number(process.env.POLL_INTERVAL_CRYPTO_MS) || LEGACY || 60_000;
 
-export function getPollIntervals() {
-  return { cryptoMs: POLL_CRYPTO_MS, tdMs: POLL_TD_MS };
+let tdWs: TwelveDataWS | null = null;
+
+export function getEngineStatus() {
+  return {
+    cryptoMs: POLL_CRYPTO_MS,
+    tdWsConnected: tdWs?.isConnected() ?? false,
+  };
 }
 
-export function startEngine(db: any) {
-  console.log(
-    `[engine] crypto poll = ${POLL_CRYPTO_MS}ms, twelve-data poll = ${POLL_TD_MS}ms`,
-  );
+export function startEngine(db: any): void {
+  console.log(`[engine] crypto poll = ${POLL_CRYPTO_MS}ms; twelve-data = WebSocket`);
 
-  // Run both immediately at startup
+  // ---- Crypto polling ----
   tickCrypto(db).catch((err) => console.error('[engine] initial crypto tick error', err));
-  tickTwelveData(db).catch((err) => console.error('[engine] initial TD tick error', err));
-
   setInterval(() => {
     tickCrypto(db).catch((err) => console.error('[engine] crypto tick error', err));
   }, POLL_CRYPTO_MS);
 
-  setInterval(() => {
-    tickTwelveData(db).catch((err) => console.error('[engine] TD tick error', err));
-  }, POLL_TD_MS);
+  // ---- Twelve Data WebSocket ----
+  tdWs = new TwelveDataWS(process.env.TWELVE_DATA_API_KEY || '', async (assetId, price) => {
+    await handleAssetPriceUpdate(db, assetId, price, 'TwelveData WS');
+  });
+  tdWs.start();
 }
 
-async function tickCrypto(db: any) {
+export function stopEngine(): void {
+  if (tdWs) {
+    tdWs.stop();
+    tdWs = null;
+  }
+}
+
+async function tickCrypto(db: any): Promise<void> {
   const ids = SUPPORTED_ASSET_IDS.filter((id) => categoryFor(id) === 'crypto');
   const quotes = await fetchCryptoPrices(ids);
-  cacheQuotes(db, quotes);
-  await evaluateAlertsFor(db, quotes, 'crypto');
+  for (const q of quotes) {
+    await handleAssetPriceUpdate(db, q.assetId, q.price, q.source);
+  }
 }
 
-async function tickTwelveData(db: any) {
-  const ids = SUPPORTED_ASSET_IDS.filter((id) => categoryFor(id) !== 'crypto');
-  const quotes = await fetchForexPrices(ids, process.env.TWELVE_DATA_API_KEY);
-  cacheQuotes(db, quotes);
-  await evaluateAlertsFor(db, quotes, 'non-crypto');
-}
-
-function cacheQuotes(db: any, quotes: { assetId: string; price: number; source: string }[]) {
-  if (!quotes.length) return;
-  const upsert = db.prepare(`
-    INSERT INTO price_cache (asset_id, price, updated_at, source)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(asset_id) DO UPDATE SET
-      price = excluded.price,
-      updated_at = excluded.updated_at,
-      source = excluded.source
-  `);
-  const now = new Date().toISOString();
-  for (const q of quotes) upsert.run(q.assetId, q.price, now, q.source);
-}
-
-async function evaluateAlertsFor(
+/**
+ * Update the cache and evaluate all active alerts for one asset.
+ * Called from both the crypto polling loop and the TD WebSocket.
+ */
+export async function handleAssetPriceUpdate(
   db: any,
-  quotes: { assetId: string; price: number; source: string }[],
-  scope: 'crypto' | 'non-crypto',
-) {
-  if (!quotes.length) return;
+  assetId: string,
+  price: number,
+  source: string,
+): Promise<void> {
+  if (!isFinite(price)) return;
 
-  const priceMap: Record<string, number> = {};
-  for (const q of quotes) priceMap[q.assetId] = q.price;
+  // Cache the latest price
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO price_cache (asset_id, price, updated_at, source)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(asset_id) DO UPDATE SET
+       price = excluded.price,
+       updated_at = excluded.updated_at,
+       source = excluded.source`,
+  ).run(assetId, price, now, source);
 
-  // Only consider alerts whose asset matches the scope of this tick
-  const matchScope = (cat: string) =>
-    scope === 'crypto' ? cat === 'crypto' : cat !== 'crypto';
+  // Find active alerts for this asset
+  const rows = db
+    .prepare('SELECT * FROM alerts WHERE asset_id = ? AND is_active = 1')
+    .all(assetId);
+  if (!rows.length) return;
 
-  const activeAlerts = db
-    .prepare('SELECT * FROM alerts WHERE is_active = 1')
-    .all()
-    .map(rowToAlert)
-    .filter((a: any) => a && matchScope(a.category));
-
-  if (!activeAlerts.length) return;
-
+  const alerts = rows.map(rowToAlert);
   const token = process.env.TELEGRAM_BOT_TOKEN || '';
   const fallbackChatId = process.env.TELEGRAM_CHAT_ID || '';
 
-  const insertLog = db.prepare(`
-    INSERT INTO notification_logs
-      (id, alert_id, asset_name, symbol, category, condition, trigger_price, target_price, timestamp, sent_to_telegram, label)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const deactivate = db.prepare('UPDATE alerts SET is_active = 0, last_triggered_at = ? WHERE id = ?');
+  const insertLog = db.prepare(
+    `INSERT INTO notification_logs
+       (id, alert_id, asset_name, symbol, category, condition, trigger_price, target_price, timestamp, sent_to_telegram, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const deactivate = db.prepare(
+    'UPDATE alerts SET is_active = 0, last_triggered_at = ? WHERE id = ?',
+  );
 
-  for (const a of activeAlerts) {
-    const price = priceMap[a.assetId];
-    if (price == null) continue;
-
+  for (const a of alerts) {
+    if (!a) continue;
     const triggered =
       a.condition === 'above' ? price >= a.targetPrice : price <= a.targetPrice;
     if (!triggered) continue;
@@ -135,7 +135,7 @@ async function evaluateAlertsFor(
 
     console.log(
       `[engine] FIRED ${a.symbol} ${a.condition} ${a.targetPrice} ` +
-        `(label=${JSON.stringify(a.label)}) -> sent=${sent}`,
+        `(label=${JSON.stringify(a.label)}, source=${source}) -> sent=${sent}`,
     );
   }
 }
