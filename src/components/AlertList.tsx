@@ -11,8 +11,7 @@ import {
   ToggleRight,
   Sparkles,
   SlidersHorizontal,
-  ArrowUpRight,
-  ArrowDownRight,
+  Target,
 } from 'lucide-react';
 import { Alert } from '../types';
 
@@ -121,7 +120,6 @@ export default function AlertList({
           </div>
         ) : (
           filteredAlerts.map((alert) => {
-            const isAbove = alert.condition === 'above';
             return (
               <div
                 key={alert.id}
@@ -137,13 +135,11 @@ export default function AlertList({
                     className={`p-2.5 rounded-lg shrink-0 mt-0.5
                     ${
                       alert.isActive
-                        ? isAbove
-                          ? 'bg-emerald-500/10 text-emerald-500'
-                          : 'bg-rose-500/10 text-rose-500'
+                        ? 'bg-emerald-500/10 text-emerald-500'
                         : 'bg-zinc-100 dark:bg-zinc-850 text-zinc-400'
                     }`}
                   >
-                    {isAbove ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+                    <Target className="w-5 h-5" />
                   </div>
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
@@ -161,9 +157,9 @@ export default function AlertList({
                       {alert.label}
                     </h3>
                     <p className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono">
-                      Target:{' '}
+                      Crosses{' '}
                       <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                        {isAbove ? '≥' : '≤'} {alert.targetPrice}
+                        {alert.targetPrice}
                       </span>
                       {alert.lastTriggeredAt && (
                         <>

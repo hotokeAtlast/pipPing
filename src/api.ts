@@ -86,8 +86,11 @@ export const api = {
     hasDefaultChatId: boolean;
     hasTwelveDataKey: boolean;
     pollIntervalCryptoMs: number;
-    tdMode: 'websocket' | 'polling';
+    tdMode: 'websocket' | 'polling' | 'hybrid';
     tdWsConnected: boolean;
+    tdWsLiveSymbols: string[];
+    tdPolledSymbols: string[];
+    tdFallbackMs: number;
   }> {
     return jsonOrThrow(await fetch('/api/health'));
   },

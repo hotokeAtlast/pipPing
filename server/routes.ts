@@ -13,22 +13,26 @@
 
 import express, { Router } from 'express';
 import { rowToAlert, rowToLog } from './db.js';
-import { sendTelegram } from './telegram.js';
+import { buildAlertMessage, sendTelegram } from './telegram.js';
 import { getEngineStatus } from './engine.js';
 
 export function registerRoutes(app: express.Express, db: any) {
   const r = Router();
 
   r.get('/health', (_req, res) => {
-    const { cryptoMs, tdWsConnected } = getEngineStatus();
+    const { cryptoMs, tdWsConnected, tdWsLiveSymbols, tdPolledSymbols, tdFallbackMs } =
+      getEngineStatus();
     res.json({
       ok: true,
       hasTelegramToken: !!process.env.TELEGRAM_BOT_TOKEN,
       hasDefaultChatId: !!process.env.TELEGRAM_CHAT_ID,
       hasTwelveDataKey: !!process.env.TWELVE_DATA_API_KEY,
       pollIntervalCryptoMs: cryptoMs,
-      tdMode: 'websocket',
+      tdMode: 'hybrid',
       tdWsConnected,
+      tdWsLiveSymbols,
+      tdPolledSymbols,
+      tdFallbackMs,
     });
   });
 
@@ -125,13 +129,19 @@ export function registerRoutes(app: express.Express, db: any) {
     const chatId = a.chatId || process.env.TELEGRAM_CHAT_ID || '';
     const cached = db.prepare('SELECT price FROM price_cache WHERE asset_id = ?').get(a.assetId) as any;
     const price = cached?.price ?? a.targetPrice;
-    const decimals = a.category === 'forex' ? 4 : 2;
+    const decimals = a.category === 'forex' ? 5 : 2;
     const triggerPrice = Number(price.toFixed(decimals));
-    const text =
-      `*pipPing TEST alert*\n\n` +
-      `*${a.label}*\n` +
-      `${a.symbol} ${a.condition} ${a.targetPrice}\n` +
-      `Current: ${triggerPrice}`;
+    const direction: 'above' | 'below' = triggerPrice >= a.targetPrice ? 'above' : 'below';
+    const text = buildAlertMessage({
+      symbol: a.symbol,
+      category: a.category,
+      label: a.label,
+      targetPrice: a.targetPrice,
+      triggerPrice,
+      direction,
+      isTest: true,
+      source: cached?.source ?? 'cache',
+    });
     const sent = await sendTelegram(token, chatId, text);
     db.prepare(
       `INSERT INTO notification_logs

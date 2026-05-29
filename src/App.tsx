@@ -38,8 +38,11 @@ export default function App() {
     hasDefaultChatId: boolean;
     hasTwelveDataKey: boolean;
     pollIntervalCryptoMs: number;
-    tdMode: 'websocket' | 'polling';
+    tdMode: 'websocket' | 'polling' | 'hybrid';
     tdWsConnected: boolean;
+    tdWsLiveSymbols: string[];
+    tdPolledSymbols: string[];
+    tdFallbackMs: number;
   } | null>(null);
 
   // Toast queue (driven by new entries appearing in /api/logs)
@@ -393,21 +396,37 @@ export default function App() {
               </h4>
               <p className="leading-relaxed text-[11px]">
                 Crypto polls every{' '}
-                {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 60}s (Binance, free).
-                Forex / gold come via Twelve Data WebSocket — real-time push, alerts fire within a
-                second of price crossing.{' '}
-                {health && health.hasTwelveDataKey && (
-                  <span
-                    className={
-                      health.tdWsConnected
-                        ? 'text-emerald-500 font-semibold'
-                        : 'text-rose-500 font-semibold'
-                    }
-                  >
-                    WS: {health.tdWsConnected ? 'connected' : 'disconnected'}
-                  </span>
-                )}
+                {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 60}s (Binance).
+                Forex / gold streams over Twelve Data WebSocket (~1s) where allowed; gated symbols
+                fall back to polling every{' '}
+                {health ? Math.round(health.tdFallbackMs / 60_000) : 5} min.
               </p>
+              {health && health.hasTwelveDataKey && (
+                <div className="text-[10px] font-mono pt-0.5 space-y-0.5">
+                  <div>
+                    <span className="text-zinc-400">WS: </span>
+                    <span
+                      className={
+                        health.tdWsConnected
+                          ? 'text-emerald-500 font-semibold'
+                          : 'text-rose-500 font-semibold'
+                      }
+                    >
+                      {health.tdWsConnected ? 'connected' : 'disconnected'}
+                    </span>
+                    {health.tdWsLiveSymbols.length > 0 && (
+                      <span className="text-zinc-500">
+                        {' · '}live: {health.tdWsLiveSymbols.join(', ')}
+                      </span>
+                    )}
+                  </div>
+                  {health.tdPolledSymbols.length > 0 && (
+                    <div className="text-zinc-500">
+                      polled: {health.tdPolledSymbols.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
               <p className="leading-relaxed text-[11px] pt-1">
                 Triggered alerts auto-disable to prevent spam — toggle them back on to re-arm.
               </p>

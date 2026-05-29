@@ -2,18 +2,22 @@
  * Twelve Data WebSocket client.
  *
  * Uses Node's native global WebSocket (Node 22+).
- *
  *   wss://ws.twelvedata.com/v1/quotes/price?apikey=YOUR_KEY
  *
- * Free tier allows 8 simultaneous symbol subscriptions and unlimited ticks
- * (no credit cost). Heartbeat every 10s keeps the connection alive.
+ * Twelve Data Basic (free) plan allows up to 8 simultaneous symbol
+ * subscriptions, but only a subset of symbols are accepted on the free
+ * tier. The rest fail at subscribe time -> we report them back to the
+ * engine via the `onSubscribeStatus` callback so the engine can poll
+ * them via REST instead.
  *
- * On disconnect we reconnect with exponential backoff capped at 30s.
+ * Heartbeat every 10s keeps the connection alive. On disconnect we
+ * reconnect with exponential backoff capped at 30s.
  */
 
 import { TD_MAP, TD_REVERSE_MAP } from './prices.js';
 
 export type TickHandler = (assetId: string, price: number) => void | Promise<void>;
+export type SubscribeStatusHandler = (success: string[], failed: string[]) => void;
 
 const HEARTBEAT_MS = 10_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -29,6 +33,7 @@ export class TwelveDataWS {
   constructor(
     private apiKey: string,
     private onTick: TickHandler,
+    private onSubscribeStatus?: SubscribeStatusHandler,
   ) {}
 
   isConnected(): boolean {
@@ -38,6 +43,8 @@ export class TwelveDataWS {
   start(): void {
     if (!this.apiKey) {
       console.warn('[ws-td] TWELVE_DATA_API_KEY not set, websocket disabled');
+      // Tell the engine: nothing live, all gated -> poll everything.
+      this.onSubscribeStatus?.([], Object.values(TD_MAP));
       return;
     }
     if (Object.keys(TD_MAP).length === 0) {
@@ -90,7 +97,6 @@ export class TwelveDataWS {
     };
 
     ws.onerror = (ev: Event) => {
-      // Node's WebSocket errors are sparse; close handler will run after.
       console.warn('[ws-td] error', (ev as any)?.message || ev);
     };
 
@@ -108,7 +114,7 @@ export class TwelveDataWS {
     const payload = JSON.stringify({ action: 'subscribe', params: { symbols } });
     try {
       this.ws?.send(payload);
-      console.log(`[ws-td] subscribed: ${symbols}`);
+      console.log(`[ws-td] subscribing: ${symbols}`);
     } catch (err) {
       console.warn('[ws-td] subscribe send failed', err);
     }
@@ -170,19 +176,41 @@ export class TwelveDataWS {
     }
 
     if (msg.event === 'subscribe-status') {
-      const succ = Array.isArray(msg.success) ? msg.success.length : 0;
-      const fail = Array.isArray(msg.fails) ? msg.fails.length : 0;
-      console.log(`[ws-td] subscribe-status ok=${succ} fail=${fail}`);
-      if (fail) console.warn('[ws-td] failed symbols', msg.fails);
+      const okSymbols: string[] = [];
+      const failSymbols: string[] = [];
+
+      // Twelve Data sends success / fails as arrays. Their shape varies
+      // ('symbol' field on each entry) — be defensive.
+      if (Array.isArray(msg.success)) {
+        for (const item of msg.success) {
+          const s = typeof item === 'string' ? item : item?.symbol;
+          if (s) okSymbols.push(s);
+        }
+      }
+      if (Array.isArray(msg.fails)) {
+        for (const item of msg.fails) {
+          const s = typeof item === 'string' ? item : item?.symbol;
+          if (s) failSymbols.push(s);
+        }
+      }
+
+      console.log(
+        `[ws-td] subscribe-status ok=${okSymbols.length} (${okSymbols.join(',') || '-'}) ` +
+          `fail=${failSymbols.length} (${failSymbols.join(',') || '-'})`,
+      );
+      if (failSymbols.length) {
+        console.warn(
+          '[ws-td] some symbols not allowed on this Twelve Data plan — engine will poll them via REST instead',
+        );
+      }
+      this.onSubscribeStatus?.(okSymbols, failSymbols);
       return;
     }
 
     if (msg.event === 'heartbeat') {
-      // ack from server, ignore
       return;
     }
 
-    // Unknown event — log briefly
     if (msg.event) console.log('[ws-td] event', msg.event);
   }
 }
