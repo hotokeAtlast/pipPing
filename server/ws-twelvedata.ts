@@ -4,14 +4,19 @@
  * Uses Node's native global WebSocket (Node 22+).
  *   wss://ws.twelvedata.com/v1/quotes/price?apikey=YOUR_KEY
  *
- * Twelve Data Basic (free) plan allows up to 8 simultaneous symbol
- * subscriptions, but only a subset of symbols are accepted on the free
- * tier. The rest fail at subscribe time -> we report them back to the
- * engine via the `onSubscribeStatus` callback so the engine can poll
- * them via REST instead.
+ * Twelve Data Basic (free) plan accepts WebSocket subscriptions for only
+ * a subset of symbols. Rejected ones are reported to the engine via
+ * `onSubscribeStatus` so they can be polled over REST instead.
  *
- * Heartbeat every 10s keeps the connection alive. On disconnect we
- * reconnect with exponential backoff capped at 30s.
+ * Heartbeat protocol (per TD docs):
+ *   - The server sends `{ event: "heartbeat" }` every ~10s.
+ *   - The client MUST reply with the same payload, otherwise the
+ *     connection is dropped abruptly with code 1006.
+ * We do NOT send unsolicited heartbeats — only respond to server pings.
+ *
+ * On disconnect we reconnect with exponential backoff capped at 30s.
+ * Symbols TD has already rejected on this connection are remembered
+ * across reconnects within the process lifetime to avoid noisy retries.
  */
 
 import { TD_MAP, TD_REVERSE_MAP } from './prices.js';
@@ -19,16 +24,25 @@ import { TD_MAP, TD_REVERSE_MAP } from './prices.js';
 export type TickHandler = (assetId: string, price: number) => void | Promise<void>;
 export type SubscribeStatusHandler = (success: string[], failed: string[]) => void;
 
-const HEARTBEAT_MS = 10_000;
 const MAX_BACKOFF_MS = 30_000;
+// Hard sanity cap: if we don't see ANY message from the server (tick or
+// heartbeat) for this long, force a reconnect.
+const STALL_TIMEOUT_MS = 45_000;
 
 export class TwelveDataWS {
   private ws: WebSocket | null = null;
   private connected = false;
-  private heartbeatTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempt = 0;
   private stopped = false;
+
+  // Symbols TD has already rejected during this process lifetime.
+  // Avoiding resubscribes keeps logs clean and dodges any potential
+  // rate-limiting on the rejected list.
+  private knownRejected = new Set<string>();
+
+  // Stall watchdog (resets on every server message)
+  private stallTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private apiKey: string,
@@ -43,7 +57,6 @@ export class TwelveDataWS {
   start(): void {
     if (!this.apiKey) {
       console.warn('[ws-td] TWELVE_DATA_API_KEY not set, websocket disabled');
-      // Tell the engine: nothing live, all gated -> poll everything.
       this.onSubscribeStatus?.([], Object.values(TD_MAP));
       return;
     }
@@ -60,7 +73,7 @@ export class TwelveDataWS {
     this.clearTimers();
     if (this.ws) {
       try {
-        this.ws.close();
+        this.ws.close(1000, 'client stop');
       } catch {
         /* ignore */
       }
@@ -87,17 +100,25 @@ export class TwelveDataWS {
       console.log('[ws-td] connected');
       this.connected = true;
       this.reconnectAttempt = 0;
+      this.armStallWatchdog();
       this.subscribe();
-      this.startHeartbeat();
     };
 
     ws.onmessage = (ev: MessageEvent) => {
+      this.armStallWatchdog(); // any message resets the watchdog
       const text = typeof ev.data === 'string' ? ev.data : String(ev.data);
       this.handleMessage(text);
     };
 
     ws.onerror = (ev: Event) => {
-      console.warn('[ws-td] error', (ev as any)?.message || ev);
+      // Browser-style WebSocket errors are sparse — surface what we can.
+      const anyEv = ev as any;
+      const detail =
+        anyEv?.message ||
+        anyEv?.error?.message ||
+        anyEv?.reason ||
+        '(no detail)';
+      console.warn(`[ws-td] error: ${detail}`);
     };
 
     ws.onclose = (ev: CloseEvent) => {
@@ -109,39 +130,45 @@ export class TwelveDataWS {
   }
 
   private subscribe(): void {
-    const symbols = Object.values(TD_MAP).join(',');
-    if (!symbols) return;
-    const payload = JSON.stringify({ action: 'subscribe', params: { symbols } });
+    // Skip symbols TD has already told us are not allowed on this plan.
+    const allSymbols = Object.values(TD_MAP);
+    const toSubscribe = allSymbols.filter((s) => !this.knownRejected.has(s));
+
+    if (toSubscribe.length === 0) {
+      console.log('[ws-td] all symbols already known-rejected, not subscribing');
+      this.onSubscribeStatus?.([], allSymbols);
+      return;
+    }
+
+    const payload = JSON.stringify({
+      action: 'subscribe',
+      params: { symbols: toSubscribe.join(',') },
+    });
     try {
       this.ws?.send(payload);
-      console.log(`[ws-td] subscribing: ${symbols}`);
+      console.log(`[ws-td] subscribing: ${toSubscribe.join(',')}`);
     } catch (err) {
       console.warn('[ws-td] subscribe send failed', err);
     }
   }
 
-  private startHeartbeat(): void {
-    this.clearHeartbeat();
-    this.heartbeatTimer = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        try {
-          this.ws.send(JSON.stringify({ action: 'heartbeat' }));
-        } catch {
-          /* ignore */
-        }
+  private armStallWatchdog(): void {
+    if (this.stallTimer) clearTimeout(this.stallTimer);
+    this.stallTimer = setTimeout(() => {
+      console.warn(`[ws-td] no messages for ${STALL_TIMEOUT_MS}ms, forcing reconnect`);
+      try {
+        this.ws?.close();
+      } catch {
+        /* ignore */
       }
-    }, HEARTBEAT_MS);
-  }
-
-  private clearHeartbeat(): void {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
+    }, STALL_TIMEOUT_MS);
   }
 
   private clearTimers(): void {
-    this.clearHeartbeat();
+    if (this.stallTimer) {
+      clearTimeout(this.stallTimer);
+      this.stallTimer = null;
+    }
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -164,6 +191,17 @@ export class TwelveDataWS {
       return;
     }
 
+    // ---- Server heartbeat: MUST be echoed back ----
+    if (msg.event === 'heartbeat') {
+      try {
+        this.ws?.send(JSON.stringify({ event: 'heartbeat' }));
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    // ---- Price tick ----
     if (msg.event === 'price' && typeof msg.symbol === 'string' && typeof msg.price === 'number') {
       const assetId = TD_REVERSE_MAP[msg.symbol];
       if (!assetId) return;
@@ -175,12 +213,12 @@ export class TwelveDataWS {
       return;
     }
 
+    // ---- Subscribe status ----
     if (msg.event === 'subscribe-status') {
       const okSymbols: string[] = [];
       const failSymbols: string[] = [];
 
-      // Twelve Data sends success / fails as arrays. Their shape varies
-      // ('symbol' field on each entry) — be defensive.
+      // Defensive: TD sends success/fails as arrays of strings OR objects with .symbol
       if (Array.isArray(msg.success)) {
         for (const item of msg.success) {
           const s = typeof item === 'string' ? item : item?.symbol;
@@ -194,6 +232,9 @@ export class TwelveDataWS {
         }
       }
 
+      // Remember rejections so we don't keep retrying them on reconnect
+      for (const s of failSymbols) this.knownRejected.add(s);
+
       console.log(
         `[ws-td] subscribe-status ok=${okSymbols.length} (${okSymbols.join(',') || '-'}) ` +
           `fail=${failSymbols.length} (${failSymbols.join(',') || '-'})`,
@@ -203,14 +244,15 @@ export class TwelveDataWS {
           '[ws-td] some symbols not allowed on this Twelve Data plan — engine will poll them via REST instead',
         );
       }
-      this.onSubscribeStatus?.(okSymbols, failSymbols);
+
+      // Report ALL known-rejected (not just this round's) so the engine
+      // keeps polling them on subsequent reconnects.
+      const allRejected = Array.from(this.knownRejected);
+      this.onSubscribeStatus?.(okSymbols, allRejected);
       return;
     }
 
-    if (msg.event === 'heartbeat') {
-      return;
-    }
-
+    // ---- Anything else: log briefly ----
     if (msg.event) console.log('[ws-td] event', msg.event);
   }
 }
