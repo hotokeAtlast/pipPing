@@ -30,7 +30,7 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Form selection
-  const [selectedAssetId, setSelectedAssetId] = useState<string>('BTCUSDT');
+  const [selectedAssetId, setSelectedAssetId] = useState<string>('EURUSD');
 
   // Backend health (warn the user if env vars are missing)
   const [health, setHealth] = useState<{
@@ -393,9 +393,9 @@ export default function App() {
               </h4>
               <p className="leading-relaxed text-[11px]">
                 Crypto polls every{' '}
-                {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 120}s (Binance, free).
-                Forex / commodity / index polls every{' '}
-                {health ? Math.round(health.pollIntervalTdMs / 60_000) : 15} min (Twelve Data, credit-limited).
+                {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 60}s (Binance, free).
+                Forex / gold polls every{' '}
+                {health ? Math.round(health.pollIntervalTdMs / 60_000) : 10} min (Twelve Data, credit-limited).
                 When a threshold hits, the bot sends you a Telegram message. Triggered alerts
                 auto-disable to prevent spam — toggle them back on to re-arm.
               </p>

@@ -7,37 +7,12 @@ import { AssetPrice } from './types';
 
 /**
  * Order matters: this is the order assets show up in the live ticker grid
- * and the alert-form dropdown. The first 9 are the user's prioritised set.
+ * and the alert-form dropdown.
+ *   - 4 forex/gold pairs via Twelve Data (credit-limited)
+ *   - 8 crypto pairs via Binance (free, polled fast)
  */
 export const SUPPORTED_ASSETS: AssetPrice[] = [
-  // ---- Top 9 (priority ticker order) ----
-  {
-    id: 'XAUUSD',
-    name: 'Gold Spot',
-    symbol: 'XAU/USD',
-    price: 0,
-    change24h: 0,
-    category: 'gold',
-    source: 'Twelve Data',
-  },
-  {
-    id: 'US30',
-    name: 'Dow Jones 30',
-    symbol: 'US30',
-    price: 0,
-    change24h: 0,
-    category: 'index',
-    source: 'Twelve Data',
-  },
-  {
-    id: 'XAGUSD',
-    name: 'Silver Spot',
-    symbol: 'XAG/USD',
-    price: 0,
-    change24h: 0,
-    category: 'commodity',
-    source: 'Twelve Data',
-  },
+  // ---- Twelve Data (in user's order) ----
   {
     id: 'EURUSD',
     name: 'EUR / USD',
@@ -45,6 +20,15 @@ export const SUPPORTED_ASSETS: AssetPrice[] = [
     price: 0,
     change24h: 0,
     category: 'forex',
+    source: 'Twelve Data',
+  },
+  {
+    id: 'XAUUSD',
+    name: 'Gold Spot',
+    symbol: 'XAU/USD',
+    price: 0,
+    change24h: 0,
+    category: 'gold',
     source: 'Twelve Data',
   },
   {
@@ -57,26 +41,18 @@ export const SUPPORTED_ASSETS: AssetPrice[] = [
     source: 'Twelve Data',
   },
   {
-    id: 'GBPCAD',
-    name: 'GBP / CAD',
-    symbol: 'GBP/CAD',
+    id: 'AUDJPY',
+    name: 'AUD / JPY',
+    symbol: 'AUD/JPY',
     price: 0,
     change24h: 0,
     category: 'forex',
     source: 'Twelve Data',
   },
+
+  // ---- Binance (free, polled fast) ----
+  // Internal id is the Binance symbol (BTCUSDT). Display label is BTC/USD.
   {
-    id: 'AUDUSD',
-    name: 'AUD / USD',
-    symbol: 'AUD/USD',
-    price: 0,
-    change24h: 0,
-    category: 'forex',
-    source: 'Twelve Data',
-  },
-  {
-    // Internally we still query Binance BTCUSDT (Tether-pegged ~= USD).
-    // Display label is BTC/USD as requested.
     id: 'BTCUSDT',
     name: 'Bitcoin',
     symbol: 'BTC/USD',
@@ -84,26 +60,6 @@ export const SUPPORTED_ASSETS: AssetPrice[] = [
     change24h: 0,
     category: 'crypto',
     source: 'Binance API',
-  },
-  {
-    id: 'DXY',
-    name: 'Dollar Index',
-    symbol: 'DXY',
-    price: 0,
-    change24h: 0,
-    category: 'index',
-    source: 'Twelve Data',
-  },
-
-  // ---- Extras (still selectable in the alert form dropdown) ----
-  {
-    id: 'GBPUSD',
-    name: 'GBP / USD',
-    symbol: 'GBP/USD',
-    price: 0,
-    change24h: 0,
-    category: 'forex',
-    source: 'Twelve Data',
   },
   {
     id: 'ETHUSDT',
@@ -118,6 +74,51 @@ export const SUPPORTED_ASSETS: AssetPrice[] = [
     id: 'SOLUSDT',
     name: 'Solana',
     symbol: 'SOL/USD',
+    price: 0,
+    change24h: 0,
+    category: 'crypto',
+    source: 'Binance API',
+  },
+  {
+    id: 'BNBUSDT',
+    name: 'BNB',
+    symbol: 'BNB/USD',
+    price: 0,
+    change24h: 0,
+    category: 'crypto',
+    source: 'Binance API',
+  },
+  {
+    id: 'XRPUSDT',
+    name: 'XRP',
+    symbol: 'XRP/USD',
+    price: 0,
+    change24h: 0,
+    category: 'crypto',
+    source: 'Binance API',
+  },
+  {
+    id: 'ADAUSDT',
+    name: 'Cardano',
+    symbol: 'ADA/USD',
+    price: 0,
+    change24h: 0,
+    category: 'crypto',
+    source: 'Binance API',
+  },
+  {
+    id: 'DOGEUSDT',
+    name: 'Dogecoin',
+    symbol: 'DOGE/USD',
+    price: 0,
+    change24h: 0,
+    category: 'crypto',
+    source: 'Binance API',
+  },
+  {
+    id: 'AVAXUSDT',
+    name: 'Avalanche',
+    symbol: 'AVAX/USD',
     price: 0,
     change24h: 0,
     category: 'crypto',
