@@ -3,7 +3,9 @@
  * Stores alerts, notification logs, and a small price cache.
  */
 
-import Database from 'better-sqlite3';
+// Uses Node's built-in SQLite (added in Node 22.5, no flag required since 24.15).
+// No native compilation, no prebuilds, no Visual Studio. Works on Windows + VM.
+import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 
@@ -13,8 +15,8 @@ export function initDb() {
   const dataDir = process.env.DATA_DIR || path.resolve(process.cwd(), 'server/data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-  const db = new Database(path.join(dataDir, 'alerts.db'));
-  db.pragma('journal_mode = WAL');
+  const db = new DatabaseSync(path.join(dataDir, 'alerts.db'));
+  db.exec('PRAGMA journal_mode = WAL');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS alerts (

@@ -32,18 +32,18 @@ After the VM is up, SSH in via the GCP console.
 
 ```bash
 sudo apt update
-sudo apt install -y nodejs npm git build-essential python3
-node --version   # should be >= 18
+sudo apt install -y git
 ```
 
-If your distro's `nodejs` package is too old, install Node 20:
+Install Node 24 LTS (required — pipPing uses Node's built-in SQLite which needs Node >= 24.15):
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
+node --version   # should be >= 24.15
 ```
 
-> `build-essential` and `python3` are required by `better-sqlite3` to compile its native binding.
+> No native compilation toolchain is needed. pipPing has zero native dependencies.
 
 ---
 

@@ -4,10 +4,10 @@ Self-hosted, unlimited price alerts for forex, gold and crypto — pushed to Tel
 
 - **Frontend:** React 19 + Vite + TypeScript + Tailwind v4
 - **Backend:** single Node process — Express API + price-poll engine + Telegram sender
-- **Storage:** SQLite (`server/data/alerts.db`)
+- **Storage:** SQLite via Node's built-in `node:sqlite` (zero native deps, **requires Node 24.15+**)
 - **Price data:** Binance (crypto, free) + Twelve Data (forex/gold, free tier)
 - **Notifications:** Telegram bot (free, unlimited)
-- **Deploy target:** GCP e2-micro Always-Free VM (or anything that runs Node 20+)
+- **Deploy target:** GCP e2-micro Always-Free VM (or anything that runs Node 24.15+)
 
 ## Quick start (local dev)
 
