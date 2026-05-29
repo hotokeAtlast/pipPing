@@ -1,7 +1,17 @@
 /**
  * Price fetchers.
  *  - Crypto: Binance public ticker (no key, effectively unlimited).
- *  - Forex/gold: Twelve Data batched call (free tier 800/day, 8/min).
+ *  - Forex / commodities / indices: Twelve Data batched call.
+ *
+ * Twelve Data free-tier note: each symbol in a batched /price call costs 1
+ * credit. With 9 fx/commodity/index symbols at 15-min poll = 864 credits/day
+ * (just over the 800/day limit). Set POLL_INTERVAL_TD_MS=1200000 (20 min)
+ * in .env if you hit the daily cap.
+ *
+ * Indices (DXY, DJI for "US30") may NOT be available on the free tier —
+ * Twelve Data will return a 4xx for those symbols and the engine will
+ * skip them and log a warning. The UI ticker shows "—" until you upgrade
+ * or swap in a different free indices source.
  */
 
 export type Quote = { assetId: string; price: number; source: string };
@@ -13,12 +23,21 @@ const BINANCE_MAP: Record<string, string> = {
   SOLUSDT: 'SOLUSDT',
 };
 
-// Internal asset id -> Twelve Data "BASE/QUOTE" symbol
+// Internal asset id -> Twelve Data symbol
+//   Forex/commodities use BASE/QUOTE format.
+//   Indices use the bare TD symbol (DXY, DJI).
 const TD_MAP: Record<string, string> = {
   EURUSD: 'EUR/USD',
-  GBPUSD: 'GBP/USD',
   USDJPY: 'USD/JPY',
+  GBPUSD: 'GBP/USD',
+  GBPCAD: 'GBP/CAD',
+  AUDUSD: 'AUD/USD',
   XAUUSD: 'XAU/USD',
+  XAGUSD: 'XAG/USD',
+  // Twelve Data uses 'DJI' for the Dow Jones Industrial Average.
+  // We expose it under the user-friendly id 'US30'.
+  US30: 'DJI',
+  DXY: 'DXY',
 };
 
 export async function fetchCryptoPrices(assetIds: string[]): Promise<Quote[]> {
@@ -52,7 +71,7 @@ export async function fetchForexPrices(
 ): Promise<Quote[]> {
   if (!apiKey) {
     if (assetIds.some((id) => TD_MAP[id])) {
-      console.warn('[prices] TWELVE_DATA_API_KEY not set, forex/gold prices will be skipped');
+      console.warn('[prices] TWELVE_DATA_API_KEY not set, forex/commodity/index prices will be skipped');
     }
     return [];
   }
@@ -83,7 +102,7 @@ export async function fetchForexPrices(
         const entry = data?.[sym];
         if (entry && typeof entry.price === 'string') {
           out.push({ assetId: id, price: parseFloat(entry.price), source: 'TwelveData' });
-        } else if (entry && entry.code) {
+        } else if (entry && (entry.code || entry.status === 'error')) {
           console.warn(`[prices] TwelveData ${sym} error: ${entry.message || entry.code}`);
         }
       }
@@ -100,9 +119,11 @@ export const SUPPORTED_ASSET_IDS = Object.freeze([
   ...Object.keys(TD_MAP),
 ]);
 
-export function categoryFor(assetId: string): 'crypto' | 'forex' | 'gold' | null {
+export function categoryFor(assetId: string): 'crypto' | 'forex' | 'gold' | 'commodity' | 'index' | null {
   if (BINANCE_MAP[assetId]) return 'crypto';
   if (assetId === 'XAUUSD') return 'gold';
+  if (assetId === 'XAGUSD') return 'commodity';
+  if (assetId === 'US30' || assetId === 'DXY') return 'index';
   if (TD_MAP[assetId]) return 'forex';
   return null;
 }

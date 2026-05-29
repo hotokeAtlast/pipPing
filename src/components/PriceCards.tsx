@@ -4,8 +4,17 @@
  */
 
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, RefreshCcw, Landmark, Coins, Award } from 'lucide-react';
-import { AssetPrice } from '../types';
+import {
+  TrendingUp,
+  TrendingDown,
+  RefreshCcw,
+  Landmark,
+  Coins,
+  Award,
+  BarChart3,
+  Gem,
+} from 'lucide-react';
+import { AssetPrice, AssetCategory } from '../types';
 
 interface PriceCardsProps {
   prices: AssetPrice[];
@@ -20,9 +29,8 @@ export default function PriceCards({
   tickHistory,
   onSelectAsset,
   isRefreshing,
-  onManualRefresh
+  onManualRefresh,
 }: PriceCardsProps) {
-  // Store the last prices to detect whether each asset went up or down during the last tick
   const [prevPrices, setPrevPrices] = useState<Record<string, number>>({});
   const [flashStates, setFlashStates] = useState<Record<string, 'up' | 'down' | null>>({});
 
@@ -32,7 +40,7 @@ export default function PriceCards({
 
     prices.forEach((asset) => {
       const prev = prevPrices[asset.id];
-      if (prev !== undefined && prev !== asset.price) {
+      if (prev !== undefined && prev !== asset.price && asset.price !== 0) {
         newFlashes[asset.id] = asset.price > prev ? 'up' : 'down';
         hasChanges = true;
       }
@@ -40,20 +48,17 @@ export default function PriceCards({
 
     if (hasChanges) {
       setFlashStates((prev) => ({ ...prev, ...newFlashes }));
-      // Save current prices as previous for next tick
       const priceMap: Record<string, number> = {};
       prices.forEach((a) => {
         priceMap[a.id] = a.price;
       });
       setPrevPrices(priceMap);
 
-      // Clear flash after 1 second
       const timer = setTimeout(() => {
         setFlashStates({});
       }, 1000);
       return () => clearTimeout(timer);
     } else {
-      // Initialize prevPrices
       const priceMap: Record<string, number> = {};
       prices.forEach((a) => {
         priceMap[a.id] = a.price;
@@ -62,21 +67,22 @@ export default function PriceCards({
     }
   }, [prices]);
 
-  // Helper to format prices beautifully based on asset class
-  const formatPrice = (price: number, category: string) => {
+  const formatPrice = (price: number, category: AssetCategory) => {
+    if (!price || !isFinite(price)) return '—';
+
+    if (category === 'forex') {
+      return price.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 5 });
+    }
     if (category === 'crypto') {
-      if (price > 1000) {
+      if (price >= 1000) {
         return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       }
       return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-    } else if (category === 'forex') {
-      return price.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 5 });
     }
-    // Gold spot
+    // gold, commodity, index
     return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Helper to draw a tiny beautiful sparkline
   const drawSparkline = (historyValues: number[] | undefined, isUp: boolean) => {
     if (!historyValues || historyValues.length < 2) {
       return (
@@ -94,7 +100,6 @@ export default function PriceCards({
 
     const points = historyValues.map((val, index) => {
       const x = (index / (historyValues.length - 1)) * width;
-      // invert Y since 0 is top
       const y = height - ((val - min) / spread) * (height - 2 * padding) - padding;
       return `${x},${y}`;
     });
@@ -115,7 +120,7 @@ export default function PriceCards({
     );
   };
 
-  const getCategoryIcon = (category: string) => {
+  const getCategoryIcon = (category: AssetCategory) => {
     switch (category) {
       case 'crypto':
         return <Coins className="w-4 h-4 text-amber-500" />;
@@ -123,6 +128,10 @@ export default function PriceCards({
         return <Landmark className="w-4 h-4 text-sky-500" />;
       case 'gold':
         return <Award className="w-4 h-4 text-yellow-500" />;
+      case 'commodity':
+        return <Gem className="w-4 h-4 text-slate-400" />;
+      case 'index':
+        return <BarChart3 className="w-4 h-4 text-violet-500" />;
       default:
         return <Coins className="w-4 h-4 text-emerald-500" />;
     }
@@ -158,8 +167,8 @@ export default function PriceCards({
           const isUp = changeVal >= 0;
           const ticks = tickHistory[asset.id] || [];
           const currentFlash = flashStates[asset.id];
+          const hasPrice = asset.price > 0 && isFinite(asset.price);
 
-          // Determine aesthetic border styling during a real-time tick alert pulse
           let cardFlashBorder = 'dark:border-zinc-800 border-zinc-200';
           let bgFlashGlow = '';
 
@@ -181,33 +190,38 @@ export default function PriceCards({
                 dark:bg-zinc-900/40 dark:hover:bg-zinc-900/80
                 bg-white hover:bg-zinc-50/50 relative overflow-hidden`}
             >
-              {/* Corner Asset Category Icon */}
               <div className="absolute top-3.5 right-3.5 opacity-90">
                 {getCategoryIcon(asset.category)}
               </div>
 
               <div>
-                {/* Symbol & Source indicator */}
                 <span className="inline-flex items-center gap-1 text-[11px] font-mono font-medium tracking-wide text-zinc-400 dark:text-zinc-500 uppercase">
                   {asset.symbol}
                 </span>
 
-                {/* Main Asset name and Price display */}
                 <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mt-1 truncate">
                   {asset.name}
                 </h3>
 
                 <div className="flex items-baseline gap-2 mt-2">
-                  <span className={`text-xl font-bold tracking-tight font-mono transition-colors duration-150
-                    ${currentFlash === 'up' ? 'text-emerald-500' : currentFlash === 'down' ? 'text-rose-500' : 'text-zinc-900 dark:text-zinc-100'}`}
+                  <span
+                    className={`text-xl font-bold tracking-tight font-mono transition-colors duration-150
+                    ${
+                      currentFlash === 'up'
+                        ? 'text-emerald-500'
+                        : currentFlash === 'down'
+                        ? 'text-rose-500'
+                        : hasPrice
+                        ? 'text-zinc-900 dark:text-zinc-100'
+                        : 'text-zinc-400 dark:text-zinc-600'
+                    }`}
                   >
                     {formatPrice(asset.price, asset.category)}
                   </span>
-                  <span className="text-[10px] text-zinc-400 font-mono">USD</span>
+                  {hasPrice && <span className="text-[10px] text-zinc-400 font-mono">USD</span>}
                 </div>
               </div>
 
-              {/* Sparkline & Percentage Trend details */}
               <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
                 <div className="flex flex-col">
                   <span className={`inline-flex items-center text-xs font-semibold ${isUp ? 'text-emerald-500' : 'text-rose-500'}`}>
@@ -220,13 +234,11 @@ export default function PriceCards({
                     {changeVal.toFixed(2)}%
                   </span>
                   <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-mono mt-0.5">
-                    {asset.isSimulated ? 'Realtime ticks' : asset.source}
+                    {hasPrice ? asset.source : 'awaiting first poll'}
                   </span>
                 </div>
 
-                <div className="opacity-85">
-                  {drawSparkline(ticks, isUp)}
-                </div>
+                <div className="opacity-85">{drawSparkline(ticks, isUp)}</div>
               </div>
             </div>
           );

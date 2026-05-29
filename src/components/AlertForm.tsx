@@ -5,7 +5,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { Bell, Sparkles } from 'lucide-react';
-import { AssetPrice } from '../types';
+import { AssetPrice, AssetCategory } from '../types';
 
 interface AlertFormProps {
   prices: AssetPrice[];
@@ -15,7 +15,7 @@ interface AlertFormProps {
     assetId: string;
     assetName: string;
     symbol: string;
-    category: 'crypto' | 'forex' | 'gold';
+    category: AssetCategory;
     condition: 'above' | 'below';
     targetPrice: number;
     label: string;

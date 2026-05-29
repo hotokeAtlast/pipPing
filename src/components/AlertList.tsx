@@ -23,7 +23,24 @@ interface AlertListProps {
   onTriggerTest: (alert: Alert) => void;
 }
 
-type FilterType = 'all' | 'crypto' | 'forex' | 'gold' | 'active' | 'inactive';
+type FilterType = 'all' | 'crypto' | 'forex' | 'gold' | 'commodity' | 'index' | 'active' | 'inactive';
+
+function categoryBadgeClass(category: string): string {
+  switch (category) {
+    case 'crypto':
+      return 'bg-amber-500/10 text-amber-500';
+    case 'forex':
+      return 'bg-sky-500/10 text-sky-500';
+    case 'gold':
+      return 'bg-yellow-500/10 text-yellow-500';
+    case 'commodity':
+      return 'bg-slate-500/10 text-slate-400';
+    case 'index':
+      return 'bg-violet-500/10 text-violet-500';
+    default:
+      return 'bg-zinc-500/10 text-zinc-500';
+  }
+}
 
 export default function AlertList({
   alerts,
@@ -85,6 +102,8 @@ export default function AlertList({
         <button onClick={() => setFilter('crypto')} className={filterBtnClass('crypto')}>Crypto</button>
         <button onClick={() => setFilter('forex')} className={filterBtnClass('forex')}>Forex</button>
         <button onClick={() => setFilter('gold')} className={filterBtnClass('gold')}>Gold</button>
+        <button onClick={() => setFilter('commodity')} className={filterBtnClass('commodity')}>Commodity</button>
+        <button onClick={() => setFilter('index')} className={filterBtnClass('index')}>Index</button>
         <button onClick={() => setFilter('active')} className={filterBtnClass('active')}>Active</button>
         <button onClick={() => setFilter('inactive')} className={filterBtnClass('inactive')}>Paused</button>
       </div>
@@ -133,13 +152,7 @@ export default function AlertList({
                       </span>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded font-mono uppercase font-semibold
-                        ${
-                          alert.category === 'crypto'
-                            ? 'bg-amber-500/10 text-amber-500'
-                            : alert.category === 'forex'
-                              ? 'bg-sky-500/10 text-sky-500'
-                              : 'bg-yellow-500/10 text-yellow-500'
-                        }`}
+                        ${categoryBadgeClass(alert.category)}`}
                       >
                         {alert.category}
                       </span>

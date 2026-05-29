@@ -1,30 +1,35 @@
 /**
  * REST API routes.
  *  GET    /api/health
- *  GET    /api/prices                  - all cached prices
- *  GET    /api/alerts                  - list alerts
- *  POST   /api/alerts                  - create alert
+ *  GET    /api/prices                   - all cached prices
+ *  GET    /api/alerts                   - list alerts
+ *  POST   /api/alerts                   - create alert
  *  PATCH  /api/alerts/:id               - update alert (toggle, edit threshold)
  *  DELETE /api/alerts/:id               - delete alert
  *  POST   /api/alerts/:id/test          - send a test telegram message right now
- *  GET    /api/logs                    - notification history
- *  DELETE /api/logs                    - clear notification history
+ *  GET    /api/logs                     - notification history
+ *  DELETE /api/logs                     - clear notification history
  */
 
 import express, { Router } from 'express';
 import { rowToAlert, rowToLog } from './db.js';
 import { sendTelegram } from './telegram.js';
+import { getPollIntervals } from './engine.js';
 
 export function registerRoutes(app: express.Express, db: any) {
   const r = Router();
 
   r.get('/health', (_req, res) => {
+    const { cryptoMs, tdMs } = getPollIntervals();
     res.json({
       ok: true,
       hasTelegramToken: !!process.env.TELEGRAM_BOT_TOKEN,
       hasDefaultChatId: !!process.env.TELEGRAM_CHAT_ID,
       hasTwelveDataKey: !!process.env.TWELVE_DATA_API_KEY,
-      pollIntervalMs: Number(process.env.POLL_INTERVAL_MS) || 120_000,
+      pollIntervalCryptoMs: cryptoMs,
+      pollIntervalTdMs: tdMs,
+      // legacy field kept for any old client
+      pollIntervalMs: tdMs,
     });
   });
 

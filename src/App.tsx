@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Send, Clock, ShieldCheck, Cpu, AlertTriangle } from 'lucide-react';
-import { Alert, NotificationLog, AssetPrice } from './types';
+import { Alert, NotificationLog, AssetPrice, AssetCategory } from './types';
 import { SUPPORTED_ASSETS } from './data';
 import { api } from './api';
 import ThemeToggle from './components/ThemeToggle';
@@ -37,6 +37,8 @@ export default function App() {
     hasTelegramToken: boolean;
     hasDefaultChatId: boolean;
     hasTwelveDataKey: boolean;
+    pollIntervalCryptoMs: number;
+    pollIntervalTdMs: number;
     pollIntervalMs: number;
   } | null>(null);
 
@@ -217,7 +219,7 @@ export default function App() {
     assetId: string;
     assetName: string;
     symbol: string;
-    category: 'crypto' | 'forex' | 'gold';
+    category: AssetCategory;
     condition: 'above' | 'below';
     targetPrice: number;
     label: string;
@@ -390,10 +392,12 @@ export default function App() {
                 How it works
               </h4>
               <p className="leading-relaxed text-[11px]">
-                Your backend polls Binance and Twelve Data every{' '}
-                {health ? Math.round(health.pollIntervalMs / 1000) : 120}s. When a threshold hits,
-                the bot sends you a Telegram message. Triggered alerts auto-disable to prevent spam
-                — toggle them back on to re-arm.
+                Crypto polls every{' '}
+                {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 120}s (Binance, free).
+                Forex / commodity / index polls every{' '}
+                {health ? Math.round(health.pollIntervalTdMs / 60_000) : 15} min (Twelve Data, credit-limited).
+                When a threshold hits, the bot sends you a Telegram message. Triggered alerts
+                auto-disable to prevent spam — toggle them back on to re-arm.
               </p>
             </div>
           </div>

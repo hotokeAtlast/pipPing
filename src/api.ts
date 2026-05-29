@@ -5,7 +5,7 @@
  * Tiny fetch wrapper around the pipPing backend.
  */
 
-import { Alert, NotificationLog } from './types';
+import { Alert, NotificationLog, AssetCategory } from './types';
 
 export interface CachedPrice {
   assetId: string;
@@ -31,7 +31,7 @@ export const api = {
     assetId: string;
     assetName: string;
     symbol: string;
-    category: 'crypto' | 'forex' | 'gold';
+    category: AssetCategory;
     condition: 'above' | 'below';
     targetPrice: number;
     label: string;
@@ -85,6 +85,8 @@ export const api = {
     hasTelegramToken: boolean;
     hasDefaultChatId: boolean;
     hasTwelveDataKey: boolean;
+    pollIntervalCryptoMs: number;
+    pollIntervalTdMs: number;
     pollIntervalMs: number;
   }> {
     return jsonOrThrow(await fetch('/api/health'));

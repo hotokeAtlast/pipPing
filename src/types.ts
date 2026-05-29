@@ -3,12 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type AssetCategory = 'crypto' | 'forex' | 'gold' | 'commodity' | 'index';
+
 export interface Alert {
   id: string;
   assetId: string;
   assetName: string;
   symbol: string;
-  category: 'crypto' | 'forex' | 'gold';
+  category: AssetCategory;
   condition: 'above' | 'below';
   targetPrice: number;
   isActive: boolean;
@@ -23,7 +25,7 @@ export interface NotificationLog {
   alertId: string;
   assetName: string;
   symbol: string;
-  category: 'crypto' | 'forex' | 'gold';
+  category: AssetCategory;
   condition: 'above' | 'below';
   triggerPrice: number;
   targetPrice: number;
@@ -38,7 +40,7 @@ export interface AssetPrice {
   symbol: string;
   price: number;
   change24h: number;
-  category: 'crypto' | 'forex' | 'gold';
+  category: AssetCategory;
   source: string;
   isSimulated?: boolean;
 }
