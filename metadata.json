@@ -1,0 +1,6 @@
+{
+  "name": "pipPing",
+  "description": "A minimalistic, highly polished crypto and forex price alert manager UI/UX featuring simulated and real-time feeds, customizable thresholds, status logs, and developer templates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
