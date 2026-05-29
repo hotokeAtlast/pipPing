@@ -8,3 +8,10 @@ coverage/
 !.env.example
 .env
 .env.local
+
+# SQLite data
+server/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

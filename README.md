@@ -1,20 +1,49 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# pipPing
 
-# Run and deploy your AI Studio app
+Self-hosted, unlimited price alerts for forex, gold and crypto — pushed to Telegram.
 
-This contains everything you need to run your app locally.
+- **Frontend:** React 19 + Vite + TypeScript + Tailwind v4
+- **Backend:** single Node process — Express API + price-poll engine + Telegram sender
+- **Storage:** SQLite via Node's built-in `node:sqlite` (zero native deps, **requires Node 24.15+**)
+- **Price data:** Binance (crypto, free) + Twelve Data (forex/gold, free tier)
+- **Notifications:** Telegram bot (free, unlimited)
+- **Deploy target:** Render free tier (one-click via `render.yaml`), or any host running Node 24.15+
 
-View your app in AI Studio: https://ai.studio/apps/2ad00b11-c7b1-4c0b-b45c-4332e08221ee
+## Quick start (local dev)
 
-## Run Locally
+```bash
+npm install
+cp .env.example .env       # fill in TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TWELVE_DATA_API_KEY
+npm run dev                # runs Vite (port 3000) and the API (port 8080) together
+```
 
-**Prerequisites:**  Node.js
+Open http://localhost:3000.
 
+## Production (single process)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+npm ci
+npm run build              # builds the frontend into dist/
+npm start                  # serves dist/ + /api on $PORT (default 8080)
+```
+
+See [DEPLOY.md](./DEPLOY.md) for the Render free-tier walkthrough.
+
+## How alerts fire
+
+1. UI sends `POST /api/alerts` with the asset, condition, and target price.
+2. The engine polls Binance + Twelve Data every `POLL_INTERVAL_MS` (default 2 min).
+3. When an active alert's condition is met, the backend sends a Telegram message and marks the alert inactive (so it can't double-fire on the next tick).
+4. Toggle the alert back on from the UI to re-arm it.
+
+## Useful endpoints
+
+- `GET /api/health` — env var status, poll interval
+- `GET /api/alerts` / `POST /api/alerts` / `PATCH /api/alerts/:id` / `DELETE /api/alerts/:id`
+- `POST /api/alerts/:id/test` — sends an immediate Telegram message for an alert (useful for verifying setup)
+- `GET /api/logs` — notification history
+- `GET /api/prices` — last cached price per asset
+
+## License
+
+Apache-2.0

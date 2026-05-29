@@ -1,0 +1,30 @@
+## Render Blueprint for pipPing.
+## Push this to your repo, then in Render: New + -> Blueprint -> pick this file.
+## Render reads it, creates the service, and asks you to fill in the secrets.
+
+services:
+  - type: web
+    name: pipping
+    runtime: node
+    region: singapore        # closest free region for India
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/ping
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 24.15.0
+      - key: PORT
+        value: 8080
+      - key: POLL_INTERVAL_CRYPTO_MS
+        value: 60000
+      - key: POLL_INTERVAL_TD_FALLBACK_MS
+        value: 300000
+      # Secrets — Render will prompt you on first deploy and never log them.
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: TWELVE_DATA_API_KEY
+        sync: false

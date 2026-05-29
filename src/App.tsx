@@ -4,9 +4,10 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Info, Send, Radio, ToggleLeft, ToggleRight, Sparkles, Clock, ShieldCheck, Cpu } from 'lucide-react';
-import { Alert, NotificationLog, AssetPrice } from './types';
-import { SUPPORTED_ASSETS, INITIAL_ALERTS, INITIAL_LOGS } from './data';
+import { Send, Clock, ShieldCheck, Cpu, AlertTriangle } from 'lucide-react';
+import { Alert, NotificationLog, AssetPrice, AssetCategory } from './types';
+import { SUPPORTED_ASSETS } from './data';
+import { api } from './api';
 import ThemeToggle from './components/ThemeToggle';
 import PriceCards from './components/PriceCards';
 import AlertForm from './components/AlertForm';
@@ -15,387 +16,286 @@ import NotificationLogList from './components/NotificationLogList';
 import DeveloperDocs from './components/DeveloperDocs';
 
 export default function App() {
-  // 1. Theme Configuration
+  // Theme
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // 2. Alert & Logs state (with LocalStorage caching)
+  // Server-backed state
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [logs, setLogs] = useState<NotificationLog[]>([]);
 
-  // 3. Current Live Ticker prices and pricing history sparklines
+  // Live prices for the ticker UI (crypto from Binance direct, fx/gold from backend)
   const [prices, setPrices] = useState<AssetPrice[]>(SUPPORTED_ASSETS);
   const [tickHistory, setTickHistory] = useState<Record<string, number[]>>({});
-  const [lastRefreshed, setLastRefreshed] = useState<string>('');
+  const [, setLastRefreshed] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // 4. Form integration parameters
-  const [selectedAssetId, setSelectedAssetId] = useState<string>('BTCUSDT');
+  // Form selection
+  const [selectedAssetId, setSelectedAssetId] = useState<string>('EURUSD');
 
-  // 5. Simulated Telegram Notification Popups Stack
-  const [telegramToasts, setTelegramToasts] = useState<Array<{
-    id: string;
-    title: string;
-    message: string;
-    timestamp: string;
-  }>>([]);
+  // Backend health (warn the user if env vars are missing)
+  const [health, setHealth] = useState<{
+    hasTelegramToken: boolean;
+    hasDefaultChatId: boolean;
+    hasTwelveDataKey: boolean;
+    pollIntervalCryptoMs: number;
+    tdMode: 'websocket' | 'polling' | 'hybrid';
+    tdWsConnected: boolean;
+    tdWsLiveSymbols: string[];
+    tdPolledSymbols: string[];
+    tdFallbackMs: number;
+  } | null>(null);
 
-  // Ref to prevent out-of-order interval updates or stale closures
-  const statePricesRef = useRef<AssetPrice[]>(prices);
-  statePricesRef.current = prices;
+  // Toast queue (driven by new entries appearing in /api/logs)
+  const [telegramToasts, setTelegramToasts] = useState<
+    Array<{ id: string; title: string; message: string; timestamp: string }>
+  >([]);
+  const seenLogIdsRef = useRef<Set<string>>(new Set());
+  const initialLogLoadRef = useRef(true);
 
-  // 6. Live Clock display
+  // Live clock
   const [clockTime, setClockTime] = useState<string>('');
-
-  // Setup visual clock interval
   useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
-      setClockTime(now.toLocaleString(undefined, {
-        hour: 'numeric',
-        minute: 'numeric',
-        second: 'numeric',
-        hour12: true,
-      }));
+    const update = () => {
+      setClockTime(
+        new Date().toLocaleString(undefined, {
+          hour: 'numeric',
+          minute: 'numeric',
+          second: 'numeric',
+          hour12: true,
+        }),
+      );
     };
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
   }, []);
 
-  // 7. Initial loading and theme startup setups
+  // Theme initialization
   useEffect(() => {
-    // Determine Theme persistence
-    const savedTheme = localStorage.getItem('pip_theme') as 'dark' | 'light' | null;
-    const initialTheme = savedTheme || 'dark';
-    setTheme(initialTheme);
-    if (initialTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-
-    // Determine Alerts persistence
-    const savedAlerts = localStorage.getItem('pip_alerts');
-    if (savedAlerts) {
-      try {
-        setAlerts(JSON.parse(savedAlerts));
-      } catch {
-        setAlerts(INITIAL_ALERTS);
-      }
-    } else {
-      setAlerts(INITIAL_ALERTS);
-    }
-
-    // Determine Notification log persistence
-    const savedLogs = localStorage.getItem('pip_logs');
-    if (savedLogs) {
-      try {
-        setLogs(JSON.parse(savedLogs));
-      } catch {
-        setLogs(INITIAL_LOGS);
-      }
-    } else {
-      setLogs(INITIAL_LOGS);
-    }
-
-    // Generate simulated back-history sparklines immediately on load
-    const initialHistory: Record<string, number[]> = {};
-    SUPPORTED_ASSETS.forEach((asset) => {
-      const hist: number[] = [];
-      let base = asset.price;
-      // create 12 randomized prior points to draw nice initial sparklines
-      for (let i = 0; i < 15; i++) {
-        const change = (Math.random() - 0.49) * (asset.category === 'forex' ? 0.001 : base * 0.008);
-        base += change;
-        hist.push(base);
-      }
-      initialHistory[asset.id] = hist;
-    });
-    setTickHistory(initialHistory);
-    setLastRefreshed(new Date().toLocaleTimeString());
+    const saved = localStorage.getItem('pip_theme') as 'dark' | 'light' | null;
+    const initial = saved || 'dark';
+    setTheme(initial);
+    document.documentElement.classList.toggle('dark', initial === 'dark');
   }, []);
 
-  // Helper: Persist alerts on edit or additions
-  const saveAlerts = (newAlerts: Alert[]) => {
-    setAlerts(newAlerts);
-    localStorage.setItem('pip_alerts', JSON.stringify(newAlerts));
-  };
-
-  // Helper: Persist notification audit logs
-  const saveLogs = (newLogs: NotificationLog[]) => {
-    setLogs(newLogs);
-    localStorage.setItem('pip_logs', JSON.stringify(newLogs));
-  };
-
-  // Theme Toggler
   const toggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    localStorage.setItem('pip_theme', nextTheme);
-    if (nextTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('pip_theme', next);
+    document.documentElement.classList.toggle('dark', next === 'dark');
+  };
+
+  // Initial load: alerts, logs, prices, health
+  useEffect(() => {
+    refreshAlerts().catch(console.error);
+    refreshLogs().catch(console.error);
+    refreshBackendPrices().catch(console.error);
+    api.health().then(setHealth).catch(console.error);
+  }, []);
+
+  // Poll alerts every 30s (catch backend-driven deactivations)
+  useEffect(() => {
+    const id = setInterval(() => {
+      refreshAlerts().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Poll logs every 6s and surface new ones as toasts
+  useEffect(() => {
+    const id = setInterval(() => {
+      refreshLogs().catch(() => {});
+    }, 6_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Poll backend prices (forex/gold) every 30s. Backend updates every 2 min.
+  useEffect(() => {
+    const id = setInterval(() => {
+      refreshBackendPrices().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Fetch crypto live from Binance every 4s for snappy tickers
+  useEffect(() => {
+    fetchLiveCrypto();
+    const id = setInterval(fetchLiveCrypto, 4200);
+    return () => clearInterval(id);
+  }, []);
+
+  // -----------------------------------------------------------------
+  // Loaders
+  // -----------------------------------------------------------------
+  const refreshAlerts = async () => {
+    const data = await api.listAlerts();
+    setAlerts(data);
+  };
+
+  const refreshLogs = async () => {
+    const data = await api.listLogs();
+    setLogs(data);
+
+    // Detect new logs since last poll and surface as toasts.
+    if (initialLogLoadRef.current) {
+      data.forEach((l) => seenLogIdsRef.current.add(l.id));
+      initialLogLoadRef.current = false;
+      return;
+    }
+    for (const log of data) {
+      if (!seenLogIdsRef.current.has(log.id)) {
+        seenLogIdsRef.current.add(log.id);
+        triggerTelegramToast(log);
+      }
     }
   };
 
-  // 8. Ticker price update routines & WebSocket fallbacks
-  const fetchLiveTickers = async () => {
-    setIsRefreshing(true);
-    let cryptoPrices: Record<string, number> = {};
-
-    // Fetch public keyless Binance crypto tickers
+  const refreshBackendPrices = async () => {
     try {
-      const symbolsToFetch = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
-      const fetches = symbolsToFetch.map(async (sym) => {
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`);
-        if (!res.ok) throw new Error('API hit rate-limit');
-        const data = await res.json();
-        return { symbol: sym, price: parseFloat(data.price) };
-      });
-
-      const results = await Promise.all(fetches);
-      results.forEach((item) => {
-        cryptoPrices[item.symbol] = item.price;
+      const cached = await api.listPrices();
+      if (!cached.length) return;
+      setPrices((prev) =>
+        prev.map((p) => {
+          const hit = cached.find((c) => c.assetId === p.id);
+          if (!hit) return p;
+          // Only override fx/gold here; crypto is updated by Binance fetch
+          if (p.category === 'crypto') return p;
+          return { ...p, price: hit.price, source: hit.source || p.source };
+        }),
+      );
+      // Push fx/gold price points into sparkline history
+      setTickHistory((prev) => {
+        const next = { ...prev };
+        for (const c of cached) {
+          const asset = SUPPORTED_ASSETS.find((a) => a.id === c.assetId);
+          if (!asset || asset.category === 'crypto') continue;
+          const q = [...(next[c.assetId] || []), c.price];
+          if (q.length > 20) q.shift();
+          next[c.assetId] = q;
+        }
+        return next;
       });
     } catch (err) {
-      console.warn('Crypto API rate-limit reached. Seamless simulator fallback activated.', err);
+      console.warn('refreshBackendPrices', err);
     }
-
-    // Process price modifications onto existing state
-    setPrices((prevPrices) => {
-      return prevPrices.map((asset) => {
-        let nextPrice = asset.price;
-        let changeAmount = 0;
-
-        if (asset.category === 'crypto' && cryptoPrices[asset.id]) {
-          // Use real live data if fetched successfully
-          nextPrice = cryptoPrices[asset.id];
-        } else {
-          // Simulated random walk deviation walk
-          const volatility = asset.category === 'forex' ? 0.00015 : asset.category === 'gold' ? 0.45 : asset.price * 0.0008;
-          // random bias walk
-          const bias = (Math.random() - 0.5) * volatility;
-          nextPrice = asset.price + bias;
-        }
-
-        // Determine 24h change percentage
-        const initialAssetRef = SUPPORTED_ASSETS.find((p) => p.id === asset.id);
-        const originalPrice = initialAssetRef ? initialAssetRef.price : asset.price;
-        const changeFactor = ((nextPrice - originalPrice) / originalPrice) * 100;
-
-        // Save tick queue history
-        setTickHistory((prevHistory) => {
-          const currentQueue = prevHistory[asset.id] || [];
-          const nextQueue = [...currentQueue, nextPrice];
-          if (nextQueue.length > 20) {
-            nextQueue.shift(); // maintain window limit
-          }
-          return { ...prevHistory, [asset.id]: nextQueue };
-        });
-
-        // Evaluate active thresholds against current updated price
-        checkAlertCondition(asset.id, asset.symbol, asset.category, nextPrice, asset.name);
-
-        return {
-          ...asset,
-          price: nextPrice,
-          change24h: changeFactor + (initialAssetRef ? initialAssetRef.change24h : 0),
-          isSimulated: !cryptoPrices[asset.id] && asset.category === 'crypto' ? true : asset.isSimulated
-        };
-      });
-    });
-
-    setLastRefreshed(new Date().toLocaleTimeString());
-    setIsRefreshing(false);
   };
 
-  // Run the background ticker prices fetching loop
-  useEffect(() => {
-    // Initial fetch
-    fetchLiveTickers();
+  const fetchLiveCrypto = async () => {
+    setIsRefreshing(true);
+    try {
+      const symbols = SUPPORTED_ASSETS.filter((a) => a.category === 'crypto').map((a) => a.id);
+      const results = await Promise.all(
+        symbols.map(async (sym) => {
+          const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`);
+          if (!res.ok) throw new Error(`Binance ${sym} ${res.status}`);
+          const data = await res.json();
+          return { id: sym, price: parseFloat(data.price) };
+        }),
+      );
+      const map: Record<string, number> = {};
+      results.forEach((r) => (map[r.id] = r.price));
 
-    // Loop interval fetches every 4 seconds for immediate responsiveness
-    const interval = setInterval(() => {
-      fetchLiveTickers();
-    }, 4200);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // 9. Alert evaluating thresholds core engine
-  const checkAlertCondition = (
-    assetId: string,
-    symbol: string,
-    category: 'crypto' | 'forex' | 'gold',
-    currentPrice: number,
-    assetName: string
-  ) => {
-    // Scan configured alerts
-    setAlerts((currentAlerts) => {
-      let containsModifications = false;
-      const nextAlerts = currentAlerts.map((alert) => {
-        if (!alert.isActive || alert.assetId !== assetId) return alert;
-
-        let triggered = false;
-        if (alert.condition === 'above' && currentPrice >= alert.targetPrice) {
-          triggered = true;
-        } else if (alert.condition === 'below' && currentPrice <= alert.targetPrice) {
-          triggered = true;
+      setPrices((prev) =>
+        prev.map((p) => (p.category === 'crypto' && map[p.id] ? { ...p, price: map[p.id] } : p)),
+      );
+      setTickHistory((prev) => {
+        const next = { ...prev };
+        for (const r of results) {
+          const q = [...(next[r.id] || []), r.price];
+          if (q.length > 20) q.shift();
+          next[r.id] = q;
         }
-
-        if (triggered) {
-          containsModifications = true;
-          // Trigger mock log history entry
-          const triggeredLog: NotificationLog = {
-            id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-            alertId: alert.id,
-            assetName: alert.assetName,
-            symbol: alert.symbol,
-            category: alert.category,
-            condition: alert.condition,
-            triggerPrice: parseFloat(currentPrice.toFixed(category === 'forex' ? 4 : 2)),
-            targetPrice: alert.targetPrice,
-            timestamp: new Date().toISOString(),
-            sentToTelegram: true,
-            label: alert.label
-          };
-
-          // Append to log history lists
-          setLogs((prevLogs) => {
-            const nextL = [triggeredLog, ...prevLogs];
-            localStorage.setItem('pip_logs', JSON.stringify(nextL));
-            return nextL;
-          });
-
-          // Dispatch simulated telegram push notification
-          triggerTelegramToast(alert.label, alert.symbol, alert.condition, alert.targetPrice, currentPrice);
-
-          // Update alert properties (set inactive to avoid double trigger matches)
-          return {
-            ...alert,
-            isActive: false,
-            lastTriggeredAt: new Date().toISOString()
-          };
-        }
-
-        return alert;
+        return next;
       });
-
-      if (containsModifications) {
-        localStorage.setItem('pip_alerts', JSON.stringify(nextAlerts));
-      }
-      return nextAlerts;
-    });
+      setLastRefreshed(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.warn('fetchLiveCrypto', err);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
-  // 10. Manual creation of dynamic alerts from Form
-  const handleAddAlert = (newAlert: {
+  // -----------------------------------------------------------------
+  // Mutations
+  // -----------------------------------------------------------------
+  const handleAddAlert = async (newAlert: {
     assetId: string;
     assetName: string;
     symbol: string;
-    category: 'crypto' | 'forex' | 'gold';
+    category: AssetCategory;
     condition: 'above' | 'below';
     targetPrice: number;
     label: string;
-    chatId: string;
+    chatId?: string;
   }) => {
-    const alertItem: Alert = {
-      ...newAlert,
-      id: `alert-${Date.now()}`,
-      isActive: true,
-      createdAt: new Date().toISOString()
-    };
-    const nextAlerts = [alertItem, ...alerts];
-    saveAlerts(nextAlerts);
+    try {
+      await api.createAlert(newAlert);
+      await refreshAlerts();
+    } catch (err) {
+      console.error('createAlert', err);
+      alert('Failed to create alert: ' + (err as Error).message);
+    }
   };
 
-  // 11. Handle Alert management commands
-  const handleToggleActiveAlert = (id: string) => {
-    const nextAlerts = alerts.map((alert) => {
-      if (alert.id === id) {
-        return { ...alert, isActive: !alert.isActive };
+  const handleToggleActiveAlert = async (id: string) => {
+    const a = alerts.find((x) => x.id === id);
+    if (!a) return;
+    try {
+      await api.updateAlert(id, { isActive: !a.isActive });
+      await refreshAlerts();
+    } catch (err) {
+      console.error('toggleAlert', err);
+    }
+  };
+
+  const handleDeleteAlert = async (id: string) => {
+    try {
+      await api.deleteAlert(id);
+      await refreshAlerts();
+    } catch (err) {
+      console.error('deleteAlert', err);
+    }
+  };
+
+  const handleClearHistoryLogs = async () => {
+    try {
+      await api.clearLogs();
+      await refreshLogs();
+    } catch (err) {
+      console.error('clearLogs', err);
+    }
+  };
+
+  const handleForceTriggerTest = async (a: Alert) => {
+    try {
+      const result = await api.testAlert(a.id);
+      await refreshLogs();
+      if (!result.sent) {
+        alert(
+          'Test attempted but Telegram message was not sent. Check the server logs and verify TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID.',
+        );
       }
-      return alert;
-    });
-    saveAlerts(nextAlerts);
+    } catch (err) {
+      console.error('testAlert', err);
+      alert('Failed to test alert: ' + (err as Error).message);
+    }
   };
 
-  const handleDeleteAlert = (id: string) => {
-    const nextAlerts = alerts.filter((alert) => alert.id !== id);
-    saveAlerts(nextAlerts);
-  };
-
-  const handleClearHistoryLogs = () => {
-    saveLogs([]);
-  };
-
-  // 12. Simulate instant trigger (Force Trigger) via list buttons
-  const handleForceTriggerTest = (alert: Alert) => {
-    // Grabs latest price or appends deviation triggered price
-    const deviationPrice = alert.condition === 'above'
-      ? alert.targetPrice + (alert.category === 'forex' ? 0.0012 : alert.targetPrice * 0.005)
-      : alert.targetPrice - (alert.category === 'forex' ? 0.0012 : alert.targetPrice * 0.005);
-    
-    const decimalPrec = alert.category === 'forex' ? 4 : 2;
-    const finalTriggerPrice = parseFloat(deviationPrice.toFixed(decimalPrec));
-
-    const forceLog: NotificationLog = {
-      id: `log-${Date.now()}`,
-      alertId: alert.id,
-      assetName: alert.assetName,
-      symbol: alert.symbol,
-      category: alert.category,
-      condition: alert.condition,
-      triggerPrice: finalTriggerPrice,
-      targetPrice: alert.targetPrice,
-      timestamp: new Date().toISOString(),
-      sentToTelegram: true,
-      label: alert.label
+  // Build a toast from a server log entry
+  const triggerTelegramToast = (log: NotificationLog) => {
+    const toast = {
+      id: `toast-${log.id}`,
+      title: 'pipPing Bot Notification',
+      message: `🔔 "${log.label}" triggered. ${log.symbol} went ${log.condition} ${log.targetPrice}. Current: ${log.triggerPrice}`,
+      timestamp: new Date(log.timestamp).toLocaleTimeString(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }),
     };
-
-    saveLogs([forceLog, ...logs]);
-
-    // Deactivate the alert since it has been triggered
-    const nextAlerts = alerts.map((a) => {
-      if (a.id === alert.id) {
-        return { ...a, isActive: false, lastTriggeredAt: new Date().toISOString() };
-      }
-      return a;
-    });
-    saveAlerts(nextAlerts);
-
-    // Send visual popup message
-    triggerTelegramToast(alert.label, alert.symbol, alert.condition, alert.targetPrice, finalTriggerPrice);
-  };
-
-  // Telegram Mock Toast dispatcher
-  const triggerTelegramToast = (
-    label: string,
-    symbol: string,
-    condition: 'above' | 'below',
-    targetPrice: number,
-    triggerPrice: number
-  ) => {
-    const toastId = `toast-${Date.now()}`;
-    const timestamp = new Date().toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-
-    const newToast = {
-      id: toastId,
-      title: `pipPing Bot Notification`,
-      message: `🔔 "${label}" triggered. ${symbol} went ${condition} threshold limit ${targetPrice}. Current price hit: ${triggerPrice}!`,
-      timestamp
-    };
-
-    setTelegramToasts((prev) => [newToast, ...prev]);
-
-    // Cleanup toast from screen after 8 seconds
+    setTelegramToasts((prev) => [toast, ...prev]);
     setTimeout(() => {
-      setTelegramToasts((prev) => prev.filter((t) => t.id !== toastId));
+      setTelegramToasts((prev) => prev.filter((t) => t.id !== toast.id));
     }, 8000);
   };
 
@@ -403,45 +303,49 @@ export default function App() {
     setTelegramToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Card select helper
   const handleSelectAssetFromTickers = (asset: AssetPrice) => {
     setSelectedAssetId(asset.id);
   };
 
+  // Health warning banner
+  const missingEnv: string[] = [];
+  if (health) {
+    if (!health.hasTelegramToken) missingEnv.push('TELEGRAM_BOT_TOKEN');
+    if (!health.hasDefaultChatId) missingEnv.push('TELEGRAM_CHAT_ID');
+    if (!health.hasTwelveDataKey) missingEnv.push('TWELVE_DATA_API_KEY');
+  }
+
   return (
     <div className="min-h-screen transition-colors duration-300 font-sans bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
-      {/* Visual background atmospheric lights in dark theme */}
       <div className="absolute top-0 left-1/4 w-[400px] h-[300px] rounded-full blur-[160px] bg-emerald-500/5 pointer-events-none hidden dark:block" />
       <div className="absolute top-[400px] right-1/4 w-[500px] h-[400px] rounded-full blur-[180px] bg-emerald-600/5 pointer-events-none hidden dark:block" />
 
-      {/* Main Container */}
       <div className="max-w-[1400px] mx-auto px-4 py-8 space-y-8 relative z-10">
-        
-        {/* Core Header Navigation Segment */}
-        <header id="app-header" className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-200/80 dark:border-zinc-900">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-200/80 dark:border-zinc-900">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="flex h-3.5 w-3.5 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
               </span>
-              <h1 id="app-title" className="text-2xl font-bold font-sans tracking-tight bg-gradient-to-r from-zinc-900 to-zinc-650 dark:from-zinc-50 dark:to-zinc-300 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-bold font-sans tracking-tight bg-gradient-to-r from-zinc-900 to-zinc-650 dark:from-zinc-50 dark:to-zinc-300 bg-clip-text text-transparent">
                 pipPing
               </h1>
               <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 text-zinc-500 font-medium">
-                v1.1
+                v0.1
               </span>
             </div>
-            <p id="app-subtitle" className="text-sm text-zinc-500 dark:text-zinc-400 max-w-lg leading-relaxed">
-              Minimalistic price alert ecosystem. Establish pricing rules for cryptocurrencies and forex, and simulated telegram notification pushes.
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-lg leading-relaxed">
+              Self-hosted price alerts for forex, gold and crypto. Backend pushes Telegram messages on threshold hits.
             </p>
           </div>
 
-          {/* Theme switcher, current clock, statistics indicators */}
           <div className="flex items-center gap-4">
             {clockTime && (
-              <div id="live-utc-clock" className="hidden lg:flex flex-col text-right font-mono text-[11px] text-zinc-455">
-                <span className="text-zinc-400 dark:text-zinc-500 uppercase tracking-widest text-[9px] font-semibold">UTC System Time</span>
+              <div className="hidden lg:flex flex-col text-right font-mono text-[11px] text-zinc-455">
+                <span className="text-zinc-400 dark:text-zinc-500 uppercase tracking-widest text-[9px] font-semibold">
+                  Local Time
+                </span>
                 <span className="font-bold text-zinc-800 dark:text-zinc-350 tracking-wider flex items-center justify-end gap-1">
                   <Clock className="w-3 h-3 text-emerald-500 animate-pulse" /> {clockTime}
                 </span>
@@ -451,19 +355,32 @@ export default function App() {
           </div>
         </header>
 
-        {/* Live Marketplace Pricing Tickers panel */}
-        <section id="pricing-tickers-section">
+        {missingEnv.length > 0 && (
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300 text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-bold">Server is missing environment variables:</strong>{' '}
+              <code className="font-mono">{missingEnv.join(', ')}</code>. Copy{' '}
+              <code>.env.example</code> to <code>.env</code> and fill them in. See{' '}
+              <code>DEPLOY.md</code> for setup steps.
+            </div>
+          </div>
+        )}
+
+        <section>
           <PriceCards
             prices={prices}
             tickHistory={tickHistory}
             onSelectAsset={handleSelectAssetFromTickers}
             isRefreshing={isRefreshing}
-            onManualRefresh={fetchLiveTickers}
+            onManualRefresh={() => {
+              fetchLiveCrypto();
+              refreshBackendPrices();
+            }}
           />
         </section>
 
-        {/* Two-Column Setup Interface (Creation Panel left, active alerts right) */}
-        <section id="alerts-workflow-section" className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-4 space-y-6">
             <AlertForm
               prices={prices}
@@ -472,14 +389,46 @@ export default function App() {
               onAddAlert={handleAddAlert}
             />
 
-            {/* Quick architectural statistics summary */}
             <div className="p-4 rounded-xl border dark:bg-zinc-900/30 dark:border-zinc-850 bg-zinc-100/40 border-zinc-200/60 text-xs text-zinc-500 dark:text-zinc-400 space-y-2">
               <h4 className="font-bold uppercase tracking-wider text-[10px] text-zinc-600 dark:text-zinc-400 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                Under the Hood Setup
+                How it works
               </h4>
               <p className="leading-relaxed text-[11px]">
-                To activate push notifications onto your phone, you deploy a lightweight <strong>Cloudflare Worker</strong> cron job. The Worker polls Binance / Twelve Data APIs every 60 seconds, evaluates limits, and fires telegram alerts. No local hardware required.
+                Crypto polls every{' '}
+                {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 60}s (Binance).
+                Forex / gold streams over Twelve Data WebSocket (~1s) where allowed; gated symbols
+                fall back to polling every{' '}
+                {health ? Math.round(health.tdFallbackMs / 60_000) : 5} min.
+              </p>
+              {health && health.hasTwelveDataKey && (
+                <div className="text-[10px] font-mono pt-0.5 space-y-0.5">
+                  <div>
+                    <span className="text-zinc-400">WS: </span>
+                    <span
+                      className={
+                        health.tdWsConnected
+                          ? 'text-emerald-500 font-semibold'
+                          : 'text-rose-500 font-semibold'
+                      }
+                    >
+                      {health.tdWsConnected ? 'connected' : 'disconnected'}
+                    </span>
+                    {health.tdWsLiveSymbols.length > 0 && (
+                      <span className="text-zinc-500">
+                        {' · '}live: {health.tdWsLiveSymbols.join(', ')}
+                      </span>
+                    )}
+                  </div>
+                  {health.tdPolledSymbols.length > 0 && (
+                    <div className="text-zinc-500">
+                      polled: {health.tdPolledSymbols.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+              <p className="leading-relaxed text-[11px] pt-1">
+                Triggered alerts auto-disable to prevent spam — toggle them back on to re-arm.
               </p>
             </div>
           </div>
@@ -494,74 +443,45 @@ export default function App() {
           </div>
         </section>
 
-        {/* Audit Status log history grid segment */}
-        <section id="history-documentation-section" className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-12">
-          {/* Left panel: Trigger notifications history logs */}
-          <NotificationLogList
-            logs={logs}
-            onClearLogs={handleClearHistoryLogs}
-          />
-
-          {/* Right panel: Tabbed setup deployment guides */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-12">
+          <NotificationLogList logs={logs} onClearLogs={handleClearHistoryLogs} />
           <DeveloperDocs />
         </section>
 
-        {/* Simple Footer */}
-        <footer id="app-footer" className="pt-10 border-t border-zinc-250 dark:border-zinc-900 text-center text-xs text-zinc-440 dark:text-zinc-500 space-y-1">
+        <footer className="pt-10 border-t border-zinc-250 dark:border-zinc-900 text-center text-xs text-zinc-440 dark:text-zinc-500 space-y-1">
           <p className="font-mono text-[10px] flex items-center justify-center gap-1">
-            <Cpu className="w-3.5 h-3.5 text-emerald-500" /> pipPing Alerting Architecture • Zero External Overhead
+            <Cpu className="w-3.5 h-3.5 text-emerald-500" /> pipPing • Self-hosted Telegram alerts
           </p>
-          <p>
-            Made with React 19, CSS Modern variables, and Tailwind CSS v4.
-          </p>
+          <p>React 19 • Vite • Tailwind v4 • Node + SQLite</p>
         </footer>
 
-        {/* ========================================================================= */}
-        {/* SIMULATED TELEGRAM OVERLAY PUSH TOASTS SYSTEM */}
-        {/* ========================================================================= */}
-        <div
-          id="telegram-simulation-overlay"
-          className="fixed bottom-5 right-5 z-50 space-y-3.5 max-w-sm w-full font-sans select-none pointer-events-none"
-        >
+        <div className="fixed bottom-5 right-5 z-50 space-y-3.5 max-w-sm w-full font-sans select-none pointer-events-none">
           {telegramToasts.map((toast) => (
             <div
-              id={`tg-toast-${toast.id}`}
               key={toast.id}
-              className="p-4 rounded-xl border pointer-events-auto shadow-2xl transition-all duration-300 bg-white/95 dark:bg-zinc-950/95 border-zinc-200 dark:border-sky-500/30 flex gap-3.5 relative overflow-hidden animate-slide-in"
-              style={{
-                animation: 'slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards'
-              }}
+              className="p-4 rounded-xl border pointer-events-auto shadow-2xl transition-all duration-300 bg-white/95 dark:bg-zinc-950/95 border-zinc-200 dark:border-sky-500/30 flex gap-3.5 relative overflow-hidden"
+              style={{ animation: 'slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}
             >
-              {/* Blue sidebar accent strip reminding of Telegram brand */}
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky-500" />
-
-              {/* Bot Icon */}
               <div className="p-2.5 rounded-full bg-sky-500/10 text-sky-500 shrink-0 h-10 w-10 flex items-center justify-center leading-none">
                 <Send className="w-5 h-5" />
               </div>
-
-              {/* Message Details */}
               <div className="space-y-1 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-xs text-sky-500 uppercase tracking-wide">
                     {toast.title}
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-400">
-                    {toast.timestamp}
-                  </span>
+                  <span className="text-[10px] font-mono text-zinc-400">{toast.timestamp}</span>
                 </div>
                 <p className="text-xs text-zinc-650 dark:text-zinc-200 font-medium leading-relaxed">
                   {toast.message}
                 </p>
                 <div className="pt-1.5 flex items-center justify-between text-[9px] font-mono text-zinc-400">
-                  <span>🚀 TeleBot API Push</span>
-                  <span>Swipe to dismiss</span>
+                  <span>Telegram push</span>
+                  <span>Click × to dismiss</span>
                 </div>
               </div>
-
-              {/* Dismiss Cross handle */}
               <button
-                id={`btn-close-toast-${toast.id}`}
                 onClick={() => removeTelegramToast(toast.id)}
                 className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 absolute top-2.5 right-2.5 cursor-pointer leading-none"
               >
@@ -571,20 +491,16 @@ export default function App() {
           ))}
         </div>
 
-        {/* Global Keyframe CSS overrides inside index.css for smooth slideIn popups layout */}
-        <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes slideIn {
-            from {
-              opacity: 0;
-              transform: translateY(20px) scale(0.95);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-            }
-          }
-        `}} />
-
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              @keyframes slideIn {
+                from { opacity: 0; transform: translateY(20px) scale(0.95); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+              }
+            `,
+          }}
+        />
       </div>
     </div>
   );
