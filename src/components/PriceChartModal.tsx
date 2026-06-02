@@ -23,11 +23,12 @@ import {
   type ISeriesApi,
   type IPriceLine,
   type ISeriesMarkersPluginApi,
+  type MouseEventParams,
   type SeriesMarker,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { X, RefreshCcw, Loader2, AlertCircle, LineChart, Plus, Trash2, Maximize2, Minimize2 } from 'lucide-react';
+import { X, RefreshCcw, Loader2, AlertCircle, LineChart, Plus, Trash2, Maximize2, Minimize2, Crosshair } from 'lucide-react';
 import { AssetPrice, AssetCategory, Alert, NotificationLog } from '../types';
 import { api, type IntervalKey } from '../api';
 
@@ -86,9 +87,11 @@ export default function PriceChartModal({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const previewLineRef = useRef<IPriceLine | null>(null);
 
   const [interval, setInterval_] = useState<IntervalKey>('15m');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [placeMode, setPlaceMode] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -345,14 +348,94 @@ export default function PriceChartModal({
     }
   }, [assetLogs, theme]);
 
-  // ---- ESC closes the modal ----
+  // ---- Tap-to-place alert mode ----
+  // Stable callback ref so the placement effect doesn't tear down on every
+  // parent re-render (parent's onCreateAlert/onClose may not be memoized).
+  const placeRef = useRef({ onCreateAlert, onClose, asset, currentPrice });
+  placeRef.current = { onCreateAlert, onClose, asset, currentPrice };
+
+  useEffect(() => {
+    if (!placeMode) return;
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    const palette = COLORS[theme];
+    const startPrice = placeRef.current.currentPrice ?? 0;
+    let line: IPriceLine | null = null;
+    try {
+      line = series.createPriceLine({
+        price: startPrice,
+        color: palette.up,
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: '◎ New alert',
+      });
+      previewLineRef.current = line;
+    } catch (err) {
+      console.warn('Failed to create preview line:', err);
+    }
+
+    const onMove = (param: MouseEventParams<Time>) => {
+      if (!param.point || !line) return;
+      const p = series.coordinateToPrice(param.point.y);
+      if (p === null) return;
+      try {
+        line.applyOptions({ price: Number(p) });
+      } catch {
+        /* line may have been removed mid-cycle */
+      }
+    };
+
+    const onClick = (param: MouseEventParams<Time>) => {
+      if (!param.point) return;
+      const p = series.coordinateToPrice(param.point.y);
+      if (p === null) return;
+      const price = Number(p);
+      if (!isFinite(price) || price <= 0) return;
+      const { onCreateAlert, onClose, asset } = placeRef.current;
+      onCreateAlert({
+        assetId: asset.id,
+        assetName: asset.name,
+        symbol: asset.symbol,
+        category: asset.category,
+        targetPrice: price,
+      });
+      setPlaceMode(false);
+      onClose();
+    };
+
+    chart.subscribeCrosshairMove(onMove);
+    chart.subscribeClick(onClick);
+
+    return () => {
+      chart.unsubscribeCrosshairMove(onMove);
+      chart.unsubscribeClick(onClick);
+      if (line) {
+        try {
+          series.removePriceLine(line);
+        } catch {
+          /* chart/series may already be gone */
+        }
+      }
+      previewLineRef.current = null;
+    };
+  }, [placeMode, theme, asset.id]);
+
+  // ---- ESC: cancel placement mode first, then close the modal ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      if (placeMode) {
+        setPlaceMode(false);
+      } else {
+        onClose();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, placeMode]);
 
   const handleCreateAlertHere = () => {
     if (!currentPrice) return;
@@ -437,6 +520,20 @@ export default function PriceChartModal({
             </button>
             <button
               type="button"
+              onClick={() => setPlaceMode((m) => !m)}
+              aria-label={placeMode ? 'Cancel placement' : 'Tap chart to place alert'}
+              aria-pressed={placeMode}
+              title={placeMode ? 'Cancel placement (ESC)' : 'Tap chart to place alert'}
+              className={`p-2 rounded-lg touch-target transition-colors ${
+                placeMode
+                  ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 ring-1 ring-sky-500/40'
+                  : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+              }`}
+            >
+              <Crosshair className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
               onClick={handleCreateAlertHere}
               disabled={!currentPrice}
               className="inline-flex items-center gap-1.5 min-h-[36px] px-2.5 sm:px-3 py-2 rounded-lg text-xs font-semibold touch-target
@@ -455,8 +552,16 @@ export default function PriceChartModal({
           <div
             ref={containerRef}
             className="absolute inset-0 w-full h-full"
-            style={{ touchAction: 'none' }}
+            style={{ touchAction: 'none', cursor: placeMode ? 'crosshair' : undefined }}
           />
+          {placeMode && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-300 text-[10px] font-mono font-semibold ring-1 ring-sky-500/30 backdrop-blur-sm whitespace-nowrap">
+                <Crosshair className="w-3 h-3" />
+                Tap chart to place alert · ESC to cancel
+              </div>
+            </div>
+          )}
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900/80 text-zinc-100 text-xs">
