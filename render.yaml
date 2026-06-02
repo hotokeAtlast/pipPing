@@ -21,10 +21,32 @@ services:
         value: 60000
       - key: POLL_INTERVAL_TD_FALLBACK_MS
         value: 300000
+      # Firebase client config (public, baked into the JS bundle at build time).
+      # Find these in Firebase Console -> Project settings -> General -> Your apps.
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      # Single-user access control. Both must be set to the same email.
+      # The VITE_ value controls the sign-in form; the non-VITE one is the
+      # server-side gate. (Render auto-passes both to the build + runtime.)
+      - key: VITE_ALLOWED_EMAIL
+        sync: false
+      - key: ALLOWED_EMAIL
+        sync: false
       # Secrets — Render will prompt you on first deploy and never log them.
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
       - key: TWELVE_DATA_API_KEY
+        sync: false
+      # Firebase Admin service-account JSON, single line.
+      # Generate at Firebase Console -> Project settings -> Service accounts ->
+      # "Generate new private key", then paste the whole file here.
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false

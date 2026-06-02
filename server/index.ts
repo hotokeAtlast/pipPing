@@ -8,7 +8,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { initDb } from './db.js';
+import './firebase.js'; // side-effect: initializes Firebase Admin + Firestore
 import { registerRoutes } from './routes.js';
 import { startEngine } from './engine.js';
 
@@ -19,8 +19,7 @@ const PORT = Number(process.env.PORT) || 8080;
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 
-const db = initDb();
-registerRoutes(app, db);
+registerRoutes(app);
 
 // In production, serve the built frontend from dist/
 const distPath = path.resolve(__dirname, '..', 'dist');
@@ -37,5 +36,5 @@ if (fs.existsSync(distPath)) {
 
 app.listen(PORT, () => {
   console.log(`[server] pipPing listening on :${PORT}`);
-  startEngine(db);
+  startEngine();
 });

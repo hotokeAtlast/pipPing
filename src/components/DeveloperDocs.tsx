@@ -10,7 +10,7 @@ export default function DeveloperDocs() {
   const [activeTab, setActiveTab] = useState<'telegram' | 'vm' | 'apis'>('telegram');
 
   const tabClass = (tab: 'telegram' | 'vm' | 'apis') =>
-    `px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-all cursor-pointer
+    `px-4 py-2.5 min-h-[40px] text-xs font-semibold uppercase tracking-wider border-b-2 transition-all cursor-pointer whitespace-nowrap shrink-0
       ${
         activeTab === tab
           ? 'border-emerald-500 text-emerald-500 dark:text-emerald-400 font-bold'
@@ -35,7 +35,7 @@ export default function DeveloperDocs() {
         </span>
       </div>
 
-      <div className="flex border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-950/40 select-none">
+      <div className="flex border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-950/40 select-none overflow-x-auto scrollbar-hide">
         <button onClick={() => setActiveTab('telegram')} className={tabClass('telegram')}>
           1. Telegram
         </button>

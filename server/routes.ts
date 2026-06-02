@@ -1,22 +1,26 @@
 /**
  * REST API routes.
- *  GET    /api/health
- *  GET    /api/prices                   - all cached prices
- *  GET    /api/alerts                   - list alerts
- *  POST   /api/alerts                   - create alert
- *  PATCH  /api/alerts/:id               - update alert (toggle, edit threshold)
- *  DELETE /api/alerts/:id               - delete alert
- *  POST   /api/alerts/:id/test          - send a test telegram message right now
- *  GET    /api/logs                     - notification history
- *  DELETE /api/logs                     - clear notification history
+ *  GET    /api/health                 (public — no auth)
+ *  GET    /api/ping                   (public — no auth, used by keep-alive)
+ *  GET    /api/prices                 (auth)
+ *  GET    /api/history/:assetId       (auth) - OHLC candles for the chart
+ *  GET    /api/alerts                 (auth)
+ *  POST   /api/alerts                 (auth)
+ *  PATCH  /api/alerts/:id             (auth)
+ *  DELETE /api/alerts/:id             (auth)
+ *  POST   /api/alerts/:id/test        (auth)
+ *  GET    /api/logs                   (auth)
+ *  DELETE /api/logs                   (auth)
  */
 
 import express, { Router } from 'express';
-import { rowToAlert, rowToLog } from './db.js';
+import { store } from './db.js';
+import { requireAuth, type AuthedRequest } from './auth.js';
 import { buildAlertMessage, sendTelegram } from './telegram.js';
 import { getEngineStatus } from './engine.js';
+import { fetchHistory, INTERVALS, type IntervalKey, SUPPORTED_ASSET_IDS } from './prices.js';
 
-export function registerRoutes(app: express.Express, db: any) {
+export function registerRoutes(app: express.Express) {
   const r = Router();
 
   r.get('/health', (_req, res) => {
@@ -39,34 +43,53 @@ export function registerRoutes(app: express.Express, db: any) {
   /**
    * Lightweight keep-alive ping for free hosts that spin down idle services
    * (e.g. Render free tier idles after 15 min of inactivity).
-   *
-   * Hit this every ~10 min from a free cron service like cron-job.org:
-   *   https://<your-render-host>.onrender.com/api/ping
-   *
-   * Intentionally does NO DB work, NO disk IO, no JSON encoding work.
    */
   r.get('/ping', (_req, res) => {
     res.type('text/plain').send('pong');
   });
 
-  r.get('/prices', (_req, res) => {
-    const rows = db.prepare('SELECT * FROM price_cache').all();
-    res.json(
-      rows.map((row: any) => ({
-        assetId: row.asset_id,
-        price: row.price,
-        updatedAt: row.updated_at,
-        source: row.source,
-      })),
+  // Everything below this point requires a valid Firebase Auth ID token.
+  r.use(requireAuth);
+
+  // Track that this user just hit the API (best-effort, fire-and-forget).
+  r.use((req: AuthedRequest, _res, next) => {
+    if (req.user) {
+      store.touchUser(req.user.uid, req.user.email).catch(() => {});
+    }
+    next();
+  });
+
+  r.get('/prices', async (_req, res) => {
+    const prices = await store.listPrices();
+    res.json(prices);
+  });
+
+  // OHLC candle history for the chart modal.
+  //   GET /api/history/:assetId?interval=1h&outputsize=200
+  r.get('/history/:assetId', async (req, res) => {
+    const assetId = req.params.assetId;
+    if (!SUPPORTED_ASSET_IDS.includes(assetId)) {
+      return res.status(400).json({ error: `unknown asset: ${assetId}` });
+    }
+    const intervalRaw = (req.query.interval as string) || '1h';
+    const allowed = INTERVALS.map((i) => i.key);
+    const interval: IntervalKey = allowed.includes(intervalRaw as IntervalKey)
+      ? (intervalRaw as IntervalKey)
+      : '1h';
+    const outputsize = Math.min(
+      1000,
+      Math.max(50, parseInt((req.query.outputsize as string) || '200', 10) || 200),
     );
+    const candles = await fetchHistory(assetId, interval, outputsize);
+    res.json({ assetId, interval, candles });
   });
 
-  r.get('/alerts', (_req, res) => {
-    const rows = db.prepare('SELECT * FROM alerts ORDER BY created_at DESC').all();
-    res.json(rows.map(rowToAlert));
+  r.get('/alerts', async (_req, res) => {
+    const alerts = await store.listAlerts();
+    res.json(alerts);
   });
 
-  r.post('/alerts', (req, res) => {
+  r.post('/alerts', async (req, res) => {
     const a = req.body || {};
     const required = ['assetId', 'assetName', 'symbol', 'category', 'condition', 'targetPrice', 'label'];
     for (const k of required) {
@@ -81,66 +104,51 @@ export function registerRoutes(app: express.Express, db: any) {
       return res.status(400).json({ error: 'targetPrice must be a number' });
     }
 
-    const id = `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const createdAt = new Date().toISOString();
-    const chatId = (a.chatId || '').toString();
-    db.prepare(
-      `INSERT INTO alerts
-        (id, asset_id, asset_name, symbol, category, condition, target_price, is_active, label, chat_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-    ).run(
-      id,
-      a.assetId,
-      a.assetName,
-      a.symbol,
-      a.category,
-      a.condition,
-      a.targetPrice,
-      a.label,
-      chatId,
-      createdAt,
-    );
-    const row = db.prepare('SELECT * FROM alerts WHERE id = ?').get(id);
-    res.status(201).json(rowToAlert(row));
+    const created = await store.createAlert({
+      assetId: a.assetId,
+      assetName: a.assetName,
+      symbol: a.symbol,
+      category: a.category,
+      condition: a.condition,
+      targetPrice: a.targetPrice,
+      label: a.label,
+      chatId: (a.chatId || '').toString(),
+    });
+    res.status(201).json(created);
   });
 
-  r.patch('/alerts/:id', (req, res) => {
+  r.patch('/alerts/:id', async (req, res) => {
     const map: Record<string, string> = {
-      isActive: 'is_active',
-      targetPrice: 'target_price',
+      isActive: 'isActive',
+      targetPrice: 'targetPrice',
       label: 'label',
       condition: 'condition',
-      chatId: 'chat_id',
+      chatId: 'chatId',
     };
-    const fields: string[] = [];
-    const vals: any[] = [];
+    const patch: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(req.body || {})) {
-      if (k in map) {
-        fields.push(`${map[k]} = ?`);
-        vals.push(typeof v === 'boolean' ? (v ? 1 : 0) : v);
-      }
+      if (k in map) patch[k] = v;
     }
-    if (!fields.length) return res.status(400).json({ error: 'no valid fields to update' });
-    vals.push(req.params.id);
-    db.prepare(`UPDATE alerts SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
-    const row = db.prepare('SELECT * FROM alerts WHERE id = ?').get(req.params.id);
-    if (!row) return res.status(404).json({ error: 'not found' });
-    res.json(rowToAlert(row));
+    if (!Object.keys(patch).length) {
+      return res.status(400).json({ error: 'no valid fields to update' });
+    }
+    const updated = await store.updateAlert(req.params.id, patch as any);
+    if (!updated) return res.status(404).json({ error: 'not found' });
+    res.json(updated);
   });
 
-  r.delete('/alerts/:id', (req, res) => {
-    db.prepare('DELETE FROM alerts WHERE id = ?').run(req.params.id);
+  r.delete('/alerts/:id', async (req, res) => {
+    await store.deleteAlert(req.params.id);
     res.json({ ok: true });
   });
 
   // Force a real Telegram send for an existing alert (good for verifying setup)
   r.post('/alerts/:id/test', async (req, res) => {
-    const row = db.prepare('SELECT * FROM alerts WHERE id = ?').get(req.params.id);
-    if (!row) return res.status(404).json({ error: 'not found' });
-    const a = rowToAlert(row)!;
+    const a = await store.getAlert(req.params.id);
+    if (!a) return res.status(404).json({ error: 'not found' });
     const token = process.env.TELEGRAM_BOT_TOKEN || '';
     const chatId = a.chatId || process.env.TELEGRAM_CHAT_ID || '';
-    const cached = db.prepare('SELECT price FROM price_cache WHERE asset_id = ?').get(a.assetId) as any;
+    const cached = await store.getPrice(a.assetId);
     const price = cached?.price ?? a.targetPrice;
     const decimals = a.category === 'forex' ? 5 : 2;
     const triggerPrice = Number(price.toFixed(decimals));
@@ -153,36 +161,31 @@ export function registerRoutes(app: express.Express, db: any) {
       triggerPrice,
       direction,
       isTest: true,
-      source: cached?.source ?? 'cache',
+      source: 'cache',
     });
     const sent = await sendTelegram(token, chatId, text);
-    db.prepare(
-      `INSERT INTO notification_logs
-        (id, alert_id, asset_name, symbol, category, condition, trigger_price, target_price, timestamp, sent_to_telegram, label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      a.id,
-      a.assetName,
-      a.symbol,
-      a.category,
-      a.condition,
+    await store.createLog({
+      alertId: a.id,
+      assetName: a.assetName,
+      symbol: a.symbol,
+      category: a.category,
+      condition: a.condition,
       triggerPrice,
-      a.targetPrice,
-      new Date().toISOString(),
-      sent ? 1 : 0,
-      `[TEST] ${a.label}`,
-    );
+      targetPrice: a.targetPrice,
+      timestamp: new Date().toISOString(),
+      sentToTelegram: sent,
+      label: `[TEST] ${a.label}`,
+    });
     res.json({ ok: true, sent, triggerPrice });
   });
 
-  r.get('/logs', (_req, res) => {
-    const rows = db.prepare('SELECT * FROM notification_logs ORDER BY timestamp DESC LIMIT 200').all();
-    res.json(rows.map(rowToLog));
+  r.get('/logs', async (_req, res) => {
+    const logs = await store.listLogs(200);
+    res.json(logs);
   });
 
-  r.delete('/logs', (_req, res) => {
-    db.prepare('DELETE FROM notification_logs').run();
+  r.delete('/logs', async (_req, res) => {
+    await store.clearLogs();
     res.json({ ok: true });
   });
 
