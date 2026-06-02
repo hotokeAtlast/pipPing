@@ -22,11 +22,12 @@ import {
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type ISeriesMarkersPluginApi,
   type SeriesMarker,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { X, RefreshCcw, Loader2, AlertCircle, LineChart, Plus, Trash2, Maximize2 } from 'lucide-react';
+import { X, RefreshCcw, Loader2, AlertCircle, LineChart, Plus, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import { AssetPrice, AssetCategory, Alert, NotificationLog } from '../types';
 import { api, type IntervalKey } from '../api';
 
@@ -47,12 +48,9 @@ interface PriceChartModalProps {
 }
 
 const INTERVAL_OPTIONS: { key: IntervalKey; label: string; defaultOutput: number }[] = [
-  { key: '1m', label: '1m', defaultOutput: 300 },
   { key: '5m', label: '5m', defaultOutput: 300 },
   { key: '15m', label: '15m', defaultOutput: 300 },
   { key: '1h', label: '1h', defaultOutput: 200 },
-  { key: '4h', label: '4h', defaultOutput: 200 },
-  { key: '1d', label: '1D', defaultOutput: 200 },
 ];
 
 const COLORS = {
@@ -87,9 +85,10 @@ export default function PriceChartModal({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
-  const markersRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
-  const [interval, setInterval_] = useState<IntervalKey>('1h');
+  const [interval, setInterval_] = useState<IntervalKey>('15m');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -187,9 +186,12 @@ export default function PriceChartModal({
       },
     });
     seriesRef.current = series;
-    markersRef.current = createSeriesMarkers(series, [], {
-      autoScale: true,
-    });
+    try {
+      markersRef.current = createSeriesMarkers(series);
+    } catch (err) {
+      console.warn('Failed to initialize chart markers:', err);
+      markersRef.current = null;
+    }
 
     // Belt-and-suspenders: re-fit the chart to its container after the
     // first paint, and on every container / viewport resize. This catches
@@ -253,7 +255,7 @@ export default function PriceChartModal({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const opt = INTERVAL_OPTIONS.find((o) => o.key === interval) ?? INTERVAL_OPTIONS[3];
+    const opt = INTERVAL_OPTIONS.find((o) => o.key === interval) ?? INTERVAL_OPTIONS[1];
     api
       .getHistory(asset.id, interval, opt.defaultOutput)
       .then((data) => {
@@ -321,10 +323,6 @@ export default function PriceChartModal({
   useEffect(() => {
     const markers = markersRef.current;
     if (!markers) return;
-    if (!assetLogs.length) {
-      markers.setMarkers([]);
-      return;
-    }
     const palette = COLORS[theme];
     const ms: SeriesMarker<Time>[] = assetLogs
       .map((l) => {
@@ -340,7 +338,11 @@ export default function PriceChartModal({
       })
       .filter((m): m is SeriesMarker<Time> => m !== null)
       .sort((a, b) => (a.time as number) - (b.time as number));
-    markers.setMarkers(ms);
+    try {
+      markers.setMarkers(ms);
+    } catch (err) {
+      console.warn('Failed to update chart markers:', err);
+    }
   }, [assetLogs, theme]);
 
   // ---- ESC closes the modal ----
@@ -369,11 +371,15 @@ export default function PriceChartModal({
       role="dialog"
       aria-modal="true"
       aria-label={`${asset.symbol} price chart`}
-      className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center bg-zinc-950/95 sm:bg-zinc-950/70 sm:backdrop-blur-sm"
+      className={`fixed inset-0 z-50 flex flex-col items-center sm:justify-center bg-zinc-950/95 sm:bg-zinc-950/70 ${isFullscreen ? '' : 'sm:backdrop-blur-sm'}`}
       onClick={onClose}
     >
       <div
-        className="w-full h-[100dvh] sm:h-auto sm:max-h-[92vh] sm:max-w-6xl flex flex-col bg-white dark:bg-zinc-950 sm:rounded-2xl sm:border sm:border-zinc-200 sm:dark:border-zinc-800 sm:shadow-2xl overflow-hidden"
+        className={`w-full h-[100dvh] flex flex-col bg-white dark:bg-zinc-950 overflow-hidden ${
+          isFullscreen
+            ? 'max-w-none sm:max-w-none sm:max-h-none sm:rounded-none'
+            : 'max-w-[385px] sm:max-w-6xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-zinc-200 sm:dark:border-zinc-800 sm:shadow-2xl'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ===== Mobile drag handle (iOS-sheet affordance) ===== */}
@@ -398,9 +404,6 @@ export default function PriceChartModal({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-sm font-bold truncate">{asset.symbol}</span>
-                <span className="hidden sm:inline text-[10px] font-mono uppercase tracking-wider text-zinc-400 truncate">
-                  {asset.name}
-                </span>
                 {currentPrice !== null && (
                   <span className="text-xs font-mono font-semibold text-zinc-700 dark:text-zinc-200 sm:hidden shrink-0">
                     {formatPriceShort(currentPrice, asset.category)}
@@ -425,12 +428,12 @@ export default function PriceChartModal({
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              onClick={() => chartRef.current?.timeScale().fitContent()}
-              aria-label="Fit chart to data"
-              title="Fit to data"
+              onClick={() => setIsFullscreen((f) => !f)}
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Expand to fullscreen'}
+              title={isFullscreen ? 'Exit fullscreen' : 'Expand to fullscreen'}
               className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 touch-target"
             >
-              <Maximize2 className="w-4 h-4" />
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
             <button
               type="button"
@@ -501,51 +504,7 @@ export default function PriceChartModal({
           >
             <RefreshCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-        </div>
-
-        {/* ===== Alerts list (this asset) — desktop only by default; mobile gets a slide-up sheet ===== */}
-        {assetAlerts.length > 0 && (
-          <div className="hidden sm:block border-t border-zinc-200 dark:border-zinc-800 max-h-44 overflow-y-auto shrink-0">
-            <div className="px-5 py-2 text-[10px] uppercase tracking-widest font-semibold text-zinc-400">
-              Alerts on this pair
-            </div>
-            <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {assetAlerts.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-center gap-3 px-5 py-2 text-xs"
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                      a.isActive ? 'bg-emerald-500' : 'bg-zinc-400'
-                    }`}
-                  />
-                  <span className="font-mono text-zinc-400 shrink-0">{a.targetPrice}</span>
-                  <span className="truncate flex-1 text-zinc-700 dark:text-zinc-200">
-                    {a.label}
-                  </span>
-                  <span
-                    className={`text-[10px] font-mono uppercase tracking-wider shrink-0 ${
-                      a.isActive ? 'text-emerald-500' : 'text-zinc-400'
-                    }`}
-                  >
-                    {a.isActive ? 'active' : 'triggered'}
-                  </span>
-                  {onDeleteAlert && (
-                    <button
-                      type="button"
-                      onClick={() => onDeleteAlert(a.id)}
-                      className="text-zinc-400 hover:text-rose-500 p-2 rounded-md hover:bg-rose-500/10 touch-target"
-                      aria-label={`Delete alert ${a.label}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        </div>        
       </div>
     </div>
   );

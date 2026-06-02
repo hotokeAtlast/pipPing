@@ -472,8 +472,10 @@ function Dashboard({ user }: DashboardProps) {
 
   return (
     <div className="min-h-[100dvh] overflow-x-hidden transition-colors duration-300 font-sans bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
-      <div className="absolute top-0 left-1/4 w-[400px] h-[300px] rounded-full blur-[160px] bg-emerald-500/5 pointer-events-none hidden dark:block" />
-      <div className="absolute top-[400px] right-1/4 w-[500px] h-[400px] rounded-full blur-[180px] bg-emerald-600/5 pointer-events-none hidden dark:block" />
+      <div aria-hidden="true" className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-[400px] h-[300px] rounded-full blur-[160px] bg-emerald-500/5 hidden dark:block" />
+        <div className="absolute top-[400px] right-1/4 w-[500px] h-[400px] rounded-full blur-[180px] bg-emerald-600/5 hidden dark:block" />
+      </div>
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-safe space-y-6 sm:space-y-8 relative z-10">
         <header className="flex flex-col gap-3 pb-4 sm:pb-6 border-b border-zinc-200/80 dark:border-zinc-900">
