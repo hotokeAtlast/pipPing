@@ -497,7 +497,7 @@ export default function PriceChartModal({
                 {loading
                   ? 'Loading…'
                   : error
-                    ? 'History unavailable'
+                    ? `History unavailable ${asset.symbol}`
                     : `${candles} candles · ${interval}`}
                 {assetAlerts.length > 0 && (
                   <>

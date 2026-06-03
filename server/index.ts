@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import './firebase.js'; // side-effect: initializes Firebase Admin + Firestore
 import { registerRoutes } from './routes.js';
 import { startEngine } from './engine.js';
+import { hydrateFromFirestore } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,7 +35,12 @@ if (fs.existsSync(distPath)) {
   console.log('[server] dist/ not found; running API-only (use Vite dev server for UI)');
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`[server] pipPing listening on :${PORT}`);
+  // Re-hydrate SQLite from Firestore on a cold-start boot (Render free
+  // tier has no persistent disk, so the SQLite file is empty every time
+  // the container restarts). Must finish BEFORE the engine starts so
+  // its first tick has the alert list to evaluate against.
+  await hydrateFromFirestore();
   startEngine();
 });

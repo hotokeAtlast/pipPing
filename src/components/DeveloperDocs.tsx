@@ -121,7 +121,7 @@ TELEGRAM_CHAT_ID=542981358`}
                 <strong>Binance</strong> — public ticker for crypto. No key required, effectively unlimited.
               </li>
               <li>
-                <strong>Twelve Data</strong> — forex and gold. Free tier: <strong>800 calls/day, 8/min</strong>. The backend batches all forex/gold symbols into a single call per poll cycle, and defaults to a 2-min interval (≈720 calls/day).
+                <strong>Twelve Data</strong> — forex and gold. Free tier: <strong>800 REST credits/day, 8 WebSocket trial credits (1 per symbol, no per-message cost)</strong>. EUR/USD + XAU/USD stream over WS (~1s); USD/JPY + AUD/JPY via batch /quote every 4 min (1 credit/call).
               </li>
             </ul>
 

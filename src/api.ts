@@ -123,7 +123,6 @@ export const api = {
     hasDefaultChatId: boolean;
     hasTwelveDataKey: boolean;
     pollIntervalCryptoMs: number;
-    tdMode: 'websocket' | 'polling' | 'hybrid';
     tdWsConnected: boolean;
     tdWsLiveSymbols: string[];
     tdPolledSymbols: string[];

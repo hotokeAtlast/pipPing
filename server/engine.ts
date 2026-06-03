@@ -1,13 +1,10 @@
 /**
  * Alert engine.
  *
- * Three price sources, three latency profiles:
- *   - Crypto via Binance:                REST polling, default 60s
- *   - Forex / gold via Twelve Data WS:   real-time push (~1s)
- *   - Forex / gold not allowed on WS:    REST polling fallback,
- *                                        default 5 min (TD free tier
- *                                        Basic plan only allows a
- *                                        subset of symbols on WS)
+ * Price sources:
+ *   - Crypto via Binance:              REST polling, default 60s
+ *   - Forex / gold via Twelve Data WS: real-time push for EUR/USD + XAU/USD (2 of 8 trial WS credits)
+ *   - USD/JPY + AUD/JPY via REST:      /quote batch, ~4 min interval (1 credit, stays within 800/day)
  *
  * All paths funnel into `handleAssetPriceUpdate` which caches the price,
  * finds matching active alerts, fires Telegram, logs, deactivates.
@@ -30,10 +27,11 @@ import { TwelveDataWS } from './ws-twelvedata.js';
 
 const LEGACY = Number(process.env.POLL_INTERVAL_MS) || 0;
 const POLL_CRYPTO_MS = Number(process.env.POLL_INTERVAL_CRYPTO_MS) || LEGACY || 60_000;
-const POLL_TD_FALLBACK_MS = Number(process.env.POLL_INTERVAL_TD_FALLBACK_MS) || 300_000; // 5 min
+// ~4 min = 360 requests/day tops, well within 800-credit daily budget with room for chart fetches.
+const POLL_TD_FALLBACK_MS = Number(process.env.POLL_INTERVAL_TD_FALLBACK_MS) || 240_000;
 
 let tdWs: TwelveDataWS | null = null;
-// Symbols whose WS subscribe failed (gated behind paid plan) — fall back to polling.
+// Symbols whose WS subscribe failed — fall back to polling.
 const wsFailedSymbols = new Set<string>();
 // Symbols accepted on the WS — never poll these.
 const wsLiveSymbols = new Set<string>();
@@ -59,11 +57,14 @@ export function startEngine(): void {
     tickCrypto().catch((err) => console.error('[engine] crypto tick error', err));
   }, POLL_CRYPTO_MS);
 
-  // ---- Twelve Data WebSocket ----
+  // ---- Twelve Data WebSocket (EUR/USD + XAU/USD only) ----
+  // These two use 2 of the 8 trial WS credits; no daily credit burn.
+  const wsSymbols = [TD_MAP.EURUSD, TD_MAP.XAUUSD].filter(Boolean);
   tdWs = new TwelveDataWS(
     process.env.TWELVE_DATA_API_KEY || '',
+    wsSymbols,
     async (assetId, price) => {
-      // WS ticks don't include 24h change; leave it undefined to keep prior value.
+      // WS ticks don't include 24h change; leave undefined to keep prior cached value.
       await handleAssetPriceUpdate(assetId, price, 'TwelveData WS');
     },
     (success: string[], failed: string[]) => {
@@ -85,7 +86,7 @@ export function startEngine(): void {
   );
   tdWs.start();
 
-  // ---- TD polling fallback ----
+  // ---- Twelve Data REST polling fallback (USD/JPY + AUD/JPY) ----
   setInterval(() => {
     tickTwelveDataFallback().catch((err) =>
       console.error('[engine] td fallback tick error', err),
@@ -118,7 +119,8 @@ async function tickTwelveDataFallback(): Promise<void> {
   if (!candidates.length) return;
   const quotes = await fetchForexPrices(candidates, process.env.TWELVE_DATA_API_KEY);
   for (const q of quotes) {
-    await handleAssetPriceUpdate(q.assetId, q.price, 'TwelveData REST');
+    // REST /quote provides change24h natively via percent_change.
+    await handleAssetPriceUpdate(q.assetId, q.price, q.source, q.change24h);
   }
 }
 

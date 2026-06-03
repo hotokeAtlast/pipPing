@@ -8,7 +8,7 @@ import { AssetPrice } from './types';
 /**
  * Order matters: this is the order assets show up in the live ticker grid
  * and the alert-form dropdown.
- *   - 4 forex/gold pairs via Twelve Data (credit-limited)
+ *   - 4 forex/gold pairs via Twelve Data (2 WS real-time, 2 REST batch /quote)
  *   - 8 crypto pairs via Binance (free, polled fast)
  */
 export const SUPPORTED_ASSETS: AssetPrice[] = [
@@ -109,7 +109,7 @@ export const SUPPORTED_ASSETS: AssetPrice[] = [
   {
     id: 'DOGEUSDT',
     name: 'Dogecoin',
-    symbol: 'DOGE/USD',
+    symbol: 'DOG/USD',
     price: 0,
     change24h: 0,
     category: 'crypto',

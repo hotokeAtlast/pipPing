@@ -46,6 +46,7 @@ export class TwelveDataWS {
 
   constructor(
     private apiKey: string,
+    private symbols: string[],
     private onTick: TickHandler,
     private onSubscribeStatus?: SubscribeStatusHandler,
   ) {}
@@ -60,8 +61,9 @@ export class TwelveDataWS {
       this.onSubscribeStatus?.([], Object.values(TD_MAP));
       return;
     }
-    if (Object.keys(TD_MAP).length === 0) {
-      console.log('[ws-td] no TD symbols configured, skipping websocket');
+    if (this.symbols.length === 0) {
+      console.log('[ws-td] no symbols to subscribe via ws, skipping websocket');
+      this.onSubscribeStatus?.([], Object.values(TD_MAP));
       return;
     }
     this.stopped = false;
@@ -131,12 +133,11 @@ export class TwelveDataWS {
 
   private subscribe(): void {
     // Skip symbols TD has already told us are not allowed on this plan.
-    const allSymbols = Object.values(TD_MAP);
-    const toSubscribe = allSymbols.filter((s) => !this.knownRejected.has(s));
+    const toSubscribe = this.symbols.filter((s) => !this.knownRejected.has(s));
 
     if (toSubscribe.length === 0) {
       console.log('[ws-td] all symbols already known-rejected, not subscribing');
-      this.onSubscribeStatus?.([], allSymbols);
+      this.onSubscribeStatus?.([], Array.from(this.knownRejected));
       return;
     }
 

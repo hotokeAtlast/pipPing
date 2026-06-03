@@ -4,9 +4,10 @@ End-to-end steps to put pipPing live on the public internet for free.
 
 **Why Render:** zero billing setup, automatic HTTPS, builds straight from GitHub, deploys on `git push`. The free plan idles after 15 min of inactivity, so we'll keep it warm with a free cron-job ping every 10 min.
 
-pipPing uses **Firebase** for both auth and persistence:
+pipPing uses **Firebase** for auth and durable backup of alerts/logs, plus a local **SQLite cache** for everything the engine touches on the hot path:
 - **Firebase Auth** (email/password) — every API call is gated by an ID token
-- **Cloud Firestore** — alerts, logs and the price cache live here, so they survive deploys and container restarts
+- **SQLite** (`node:sqlite`, built-in to Node 22+) — primary read path for alerts, logs, and the price cache. Zero quota, microsecond latency.
+- **Cloud Firestore** — durable mirror for alerts and logs only. The SQLite file is wiped on every Render free-tier cold start, so Firestore is what restores the active alert list on the next boot. Prices are **not** mirrored (they refresh every ~60s anyway).
 
 ---
 
@@ -62,7 +63,7 @@ The first build takes ~3-5 min. Watch the live log; you should see:
 ```
 [firebase] initialized from FIREBASE_SERVICE_ACCOUNT_JSON
 [server] pipPing listening on :8080
-[engine] crypto=60000ms; td=WebSocket+300000ms-fallback
+[engine] crypto=60000ms; td=WebSocket+240000ms-fallback
 [ws-td] connected
 ```
 
@@ -115,11 +116,11 @@ To change an env var: Render dashboard → your service → **Environment** → 
 
 - **Render free**: 750 instance-hours/month (= 31 days × 24h, exactly enough). 512 MB RAM. 0.1 CPU. Spin-down after 15 min idle (we prevent this with the cron).
 - **cron-job.org**: 60 jobs free, every 1 min minimum. Very generous.
-- **Twelve Data Basic**: 800 credits/day, 8 calls/min. Most free pairs accepted on WS, JPY pairs gated → polled every 5 min. The chart history endpoint uses `/time_series` (1 credit per request) — opening a chart for a forex/gold pair costs 1 credit. Crypto chart history goes through Binance, no key needed.
+- **Twelve Data free**: 800 REST credits/day, 8 WebSocket trial credits (1 per symbol, no per-message cost). EUR/USD + XAU/USD stream over WS (2 credits); USD/JPY + AUD/JPY via batch `/quote` every 4 min (1 credit/call, ~360/day). Chart history via `/time_series` (1 credit per chart load).
 - **Binance**: free, no key needed, ~1200 weight/min limit. Negligible at our usage.
 - **Telegram Bot API**: free, no quota worth caring about.
 - **Firebase Auth**: free for the volumes we'll use.
-- **Firestore (Spark plan)**: 1 GiB storage, 50K reads/day, 20K writes/day. pipPing's polling engine does ~5 reads + ~5 writes every minute, so you can run 24/7 comfortably on the free tier.
+- **Firestore (Spark plan)**: 1 GiB storage, 50K reads/day, 20K writes/day. pipPing reads from SQLite at runtime, so Firestore only sees writes when an alert is created/updated/triggered (a handful per day) and reads only at cold-start hydration (~1 query per restart). Easily fits the Spark plan with room to spare.
 
 ---
 
@@ -131,8 +132,8 @@ To change an env var: Render dashboard → your service → **Environment** → 
 | Login screen shows "Firebase client config missing" | Missing VITE_FIREBASE_* env vars | Add them in Render → Environment, redeploy |
 | Sign-in returns `400` from Firebase | Auth not enabled | Firebase Console → Authentication → Sign-in method → enable Email/Password |
 | `firebase-admin` throws "unable to find credentials" | `FIREBASE_SERVICE_ACCOUNT_JSON` empty or malformed | Re-copy the JSON; validate it parses with `JSON.parse` |
-| 24h change always `0.00%` | Twelvedata /quote returned 400/404 for one of the symbols | The engine falls back to the last good value; the next poll will retry. If it persists, check the symbol list in `server/prices.ts` against your TD plan. |
-| Chart shows "Could not load history" | Binance or Twelve Data rate-limited / no permission | Crypto uses Binance (no key) — should always work. Forex/gold uses `/time_series` which may be gated on the Basic plan; if it fails, the rest of the app still works, only the chart for that pair is empty. |
-| `subscribe-status fail=4` | TD plan rejects all symbols | Check the `TWELVE_DATA_API_KEY` env var is correct in Render |
+| 24h change always `0.00%` | Twelve Data /quote returned an error for one of the symbols | The engine falls back to the last good value; the next poll will retry. If it persists, check the symbol list in `server/prices.ts` against your Twelve Data plan. |
+| Chart shows "Could not load history" | Binance or Twelve Data rate-limited / no permission | Crypto uses Binance (no key) — should always work. Forex/gold uses `/time_series`; if it fails, the rest of the app still works, only the chart for that pair is empty. |
+| `subscribe-status` shows no symbols accepted | Twelve Data plan rejects the symbols | Check the `TWELVE_DATA_API_KEY` env var is correct in Render |
 | No Telegram DM ever | Wrong `TELEGRAM_CHAT_ID` | Send any message to your bot first, then re-fetch your chat_id from `@userinfobot` |
 | `/api/ping` returns 502 | Service is asleep, mid-spin-up | Wait 30-60s, ping again. Confirm cron-job.org is running every 10 min. |

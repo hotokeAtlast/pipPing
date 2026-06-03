@@ -32,7 +32,6 @@ export function registerRoutes(app: express.Express) {
       hasDefaultChatId: !!process.env.TELEGRAM_CHAT_ID,
       hasTwelveDataKey: !!process.env.TWELVE_DATA_API_KEY,
       pollIntervalCryptoMs: cryptoMs,
-      tdMode: 'hybrid',
       tdWsConnected,
       tdWsLiveSymbols,
       tdPolledSymbols,

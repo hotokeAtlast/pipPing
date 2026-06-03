@@ -20,7 +20,7 @@ services:
       - key: POLL_INTERVAL_CRYPTO_MS
         value: 60000
       - key: POLL_INTERVAL_TD_FALLBACK_MS
-        value: 300000
+        value: 240000
       # Firebase client config (public, baked into the JS bundle at build time).
       # Find these in Firebase Console -> Project settings -> General -> Your apps.
       - key: VITE_FIREBASE_API_KEY

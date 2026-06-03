@@ -2,13 +2,8 @@
  * Price fetchers.
  *  - Crypto:       Binance /ticker/24hr (spot price + 24h change in one call, no key).
  *  - Forex / gold: Twelve Data /quote (close + percent_change in one credit/call).
- *
- * Twelve Data free-tier note: 800 credits/day, 8 calls/min. We use 1 credit
- * per /quote call. For 4 fx/gold symbols at 5-min fallback = ~1,152 credits/day
- * (over budget). Mitigation: the WebSocket covers most symbols on the free
- * plan, so /quote only runs for the WS-gated ones. To stay safe, we also fall
- * back to /price (no change%) if the call fails or the user is on a tight
- * plan.
+ *                  WS covers EUR/USD + XAU/USD (2 of 8 trial WS credits, no daily burn).
+ *                  REST covers USD/JPY + AUD/JPY (batch /quote, 1 credit, every ~4 min).
  */
 
 export type Quote = {
@@ -132,9 +127,8 @@ export async function fetchForexPrices(
   if (!symbolPairs.length) return [];
 
   const symbolsCsv = symbolPairs.map((p) => p.sym).join(',');
-  // /quote returns close + percent_change in one call (same credit cost as /price).
+  // /quote returns close + percent_change in one call (1 credit regardless of how many symbols in the CSV).
   const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbolsCsv)}&apikey=${apiKey}`;
-
   try {
     const res = await fetch(url);
     if (!res.ok) {
@@ -225,7 +219,7 @@ export async function fetchHistory(
     if (tdSym) {
       const apiKey = process.env.TWELVE_DATA_API_KEY;
       if (!apiKey) {
-        console.warn('[history] TWELVE_DATA_API_KEY not set, skipping TD history');
+        console.warn('[history] TWELVE_DATA_API_KEY not set, skipping forex/gold history');
         return [];
       }
       const url =

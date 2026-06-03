@@ -96,7 +96,6 @@ function Dashboard({ user }: DashboardProps) {
     hasDefaultChatId: boolean;
     hasTwelveDataKey: boolean;
     pollIntervalCryptoMs: number;
-    tdMode: 'websocket' | 'polling' | 'hybrid';
     tdWsConnected: boolean;
     tdWsLiveSymbols: string[];
     tdPolledSymbols: string[];
@@ -595,9 +594,9 @@ function Dashboard({ user }: DashboardProps) {
               <p className="leading-relaxed text-[11px]">
                 Crypto polls every{' '}
                 {health ? Math.round(health.pollIntervalCryptoMs / 1000) : 60}s (Binance).
-                Forex / gold streams over Twelve Data WebSocket (~1s) where allowed; gated symbols
-                fall back to polling every{' '}
-                {health ? Math.round(health.tdFallbackMs / 60_000) : 5} min.
+                EUR/USD + XAU/USD streams over Twelve Data WebSocket (~1s, 2 of 8 trial WS credits);{' '}
+                USD/JPY + AUD/JPY via REST batch /quote every{' '}
+                {health ? Math.round(health.tdFallbackMs / 60_000) : 4} min.
               </p>
               {health && health.hasTwelveDataKey && (
                 <div className="text-[10px] font-mono pt-0.5 space-y-0.5">

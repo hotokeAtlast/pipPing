@@ -9,3 +9,7 @@ coverage/
 .env
 .env.local
 serviceAccountKey.json
+server/data/
+*.db
+*.db-shm
+*.db-wal
