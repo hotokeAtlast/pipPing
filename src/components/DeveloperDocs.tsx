@@ -75,7 +75,7 @@ export default function DeveloperDocs() {
               <div>
                 <h4 className="font-bold dark:text-zinc-150">Configure the server</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  Put both values in <code>.env</code> along with the Twelve Data API key (see <code>twelvedata.com</code> for a free account). The bot token is sensitive, so keep it secret.:
+                  Put both values in <code>.env</code> along with the Twelve Data API key (see <code>twelvedata.com</code> for a free account). The bot token is sensitive, so keep it secret:
                 </p>
                 <pre className="mt-2 p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-900 font-mono text-[11px] text-zinc-600 dark:text-zinc-300 overflow-x-auto">
 {`TELEGRAM_BOT_TOKEN=123456:AA...
