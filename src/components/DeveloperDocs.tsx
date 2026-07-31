@@ -37,7 +37,7 @@ export default function DeveloperDocs() {
 
       <div className="flex border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-950/40 select-none">
         <button onClick={() => setActiveTab('telegram')} className={tabClass('telegram')}>
-          1. Telegram
+          1. API Setup
         </button>
         <button onClick={() => setActiveTab('vm')} className={tabClass('vm')}>
           2. GCP VM
@@ -53,7 +53,7 @@ export default function DeveloperDocs() {
             <div className="flex items-start gap-3">
               <div className="p-2 rounded bg-emerald-500/10 text-emerald-500 shrink-0">1</div>
               <div>
-                <h4 className="font-bold text-zinc-900 dark:text-zinc-150">Create your bot</h4>
+                <h4 className="font-bold dark:text-zinc-150">Create your bot</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   Open Telegram, search for <code>@BotFather</code>, send <code>/newbot</code>, follow the prompts. Save the bot token.
                 </p>
@@ -63,7 +63,7 @@ export default function DeveloperDocs() {
             <div className="flex items-start gap-3">
               <div className="p-2 rounded bg-emerald-500/10 text-emerald-500 shrink-0">2</div>
               <div>
-                <h4 className="font-bold text-zinc-900 dark:text-zinc-150">Get your chat id</h4>
+                <h4 className="font-bold  dark:text-zinc-150">Get your chat id</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   Send any message to your new bot, then message <code>@userinfobot</code> on Telegram. It will reply with your numerical chat id (e.g. <code>542981358</code>).
                 </p>
@@ -73,13 +73,14 @@ export default function DeveloperDocs() {
             <div className="flex items-start gap-3">
               <div className="p-2 rounded bg-emerald-500/10 text-emerald-500 shrink-0">3</div>
               <div>
-                <h4 className="font-bold text-zinc-900 dark:text-zinc-150">Configure the server</h4>
+                <h4 className="font-bold dark:text-zinc-150">Configure the server</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  Put both values in <code>.env</code>:
+                  Put both values in <code>.env</code> along with the Twelve Data API key (see <code>twelvedata.com</code> for a free account). The bot token is sensitive, so keep it secret:
                 </p>
                 <pre className="mt-2 p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-900 font-mono text-[11px] text-zinc-600 dark:text-zinc-300 overflow-x-auto">
 {`TELEGRAM_BOT_TOKEN=123456:AA...
-TELEGRAM_CHAT_ID=542981358`}
+TELEGRAM_CHAT_ID=542981358
+TWELVE_DATA_API_KEY=...`}
                 </pre>
               </div>
             </div>
@@ -95,7 +96,7 @@ TELEGRAM_CHAT_ID=542981358`}
             <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-900 font-mono text-[11px] text-zinc-600 dark:text-zinc-300 space-y-1">
               <div className="text-emerald-500"># on the VM</div>
               <div>sudo apt install -y nodejs npm git build-essential python3</div>
-              <div>git clone https://github.com/&lt;you&gt;/pipPing /opt/pipping</div>
+              <div>git clone https://github.com/hotokeAtlast/pipPing/opt/pipping</div>
               <div>cd /opt/pipping && npm ci && npm run build</div>
               <div>cp .env.example .env && nano .env</div>
               <div>npm start</div>
