@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
 /* ------------------------------------------------------------------
    pipPing global styles
    - safe-area helpers for notched phones (iPhone X+, modern Android)

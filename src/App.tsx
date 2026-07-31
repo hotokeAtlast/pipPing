@@ -490,7 +490,7 @@ function Dashboard({ user }: DashboardProps) {
                   pipPing
                 </h1>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 text-zinc-500 font-medium shrink-0">
-                  v0.1
+                  v0.3.1
                 </span>
               </div>
               <p className="hidden sm:block text-sm text-zinc-500 dark:text-zinc-400 max-w-lg leading-relaxed">
