@@ -62,7 +62,7 @@ export default function AlertList({
   });
 
   const filterBtnClass = (f: FilterType) =>
-    `px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer
+    `px-3 py-2 rounded-lg text-[11px] sm:text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap
       ${
         filter === f
           ? 'bg-emerald-500 dark:bg-emerald-600 text-white shadow-sm'
@@ -96,7 +96,7 @@ export default function AlertList({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-5 pb-1 select-none">
+      <div className="flex gap-1.5 mb-5 pb-2 select-none overflow-x-auto scrollbar-hide -mx-1 px-1">
         <button onClick={() => setFilter('all')} className={filterBtnClass('all')}>All</button>
         <button onClick={() => setFilter('crypto')} className={filterBtnClass('crypto')}>Crypto</button>
         <button onClick={() => setFilter('forex')} className={filterBtnClass('forex')}>Forex</button>
@@ -130,7 +130,7 @@ export default function AlertList({
                       : 'bg-zinc-50/60 dark:bg-zinc-950/40 border-zinc-200/50 dark:border-zinc-900/60 opacity-60'
                   }`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
                   <div
                     className={`p-2.5 rounded-lg shrink-0 mt-0.5
                     ${
@@ -141,7 +141,7 @@ export default function AlertList({
                   >
                     <Target className="w-5 h-5" />
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-0.5 min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono font-bold dark:text-zinc-200 text-zinc-800 uppercase">
                         {alert.symbol}
@@ -179,10 +179,10 @@ export default function AlertList({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2.5 pt-3 md:pt-0 border-t md:border-t-0 border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center justify-end gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-zinc-100 dark:border-zinc-800 shrink-0">
                   <button
                     onClick={() => onTriggerTest(alert)}
-                    className="px-2.5 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded-lg border flex items-center gap-1.5 transition-all
+                    className="min-h-[36px] px-2.5 py-2 text-[10px] uppercase font-bold tracking-wider rounded-lg border flex items-center gap-1.5 transition-all
                         dark:border-emerald-500/20 dark:bg-emerald-500/5 dark:text-emerald-400 dark:hover:bg-emerald-500/10
                         border-emerald-200 bg-emerald-50/50 text-emerald-600 hover:bg-emerald-50 cursor-pointer"
                     title="Send a real test Telegram message right now"
@@ -192,7 +192,7 @@ export default function AlertList({
 
                   <button
                     onClick={() => onToggleActive(alert.id)}
-                    className="p-1 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer"
+                    className="p-2.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer touch-target"
                     title={alert.isActive ? 'Pause alert' : 'Resume alert'}
                   >
                     {alert.isActive ? (
@@ -204,7 +204,7 @@ export default function AlertList({
 
                   <button
                     onClick={() => onDeleteAlert(alert.id)}
-                    className="p-2 rounded-lg border border-rose-500/12 dark:bg-rose-500/5 dark:text-rose-400 dark:hover:bg-rose-500/10 bg-rose-50 text-rose-500 hover:bg-rose-100 cursor-pointer"
+                    className="p-2.5 rounded-lg border border-rose-500/12 dark:bg-rose-500/5 dark:text-rose-400 dark:hover:bg-rose-500/10 bg-rose-50 text-rose-500 hover:bg-rose-100 cursor-pointer touch-target"
                     title="Delete alert"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

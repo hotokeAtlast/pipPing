@@ -10,7 +10,7 @@ export default function DeveloperDocs() {
   const [activeTab, setActiveTab] = useState<'telegram' | 'vm' | 'apis'>('telegram');
 
   const tabClass = (tab: 'telegram' | 'vm' | 'apis') =>
-    `px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-all cursor-pointer
+    `px-4 py-2.5 min-h-[40px] text-xs font-semibold uppercase tracking-wider border-b-2 transition-all cursor-pointer whitespace-nowrap shrink-0
       ${
         activeTab === tab
           ? 'border-emerald-500 text-emerald-500 dark:text-emerald-400 font-bold'
@@ -35,9 +35,9 @@ export default function DeveloperDocs() {
         </span>
       </div>
 
-      <div className="flex border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-950/40 select-none">
+      <div className="flex border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-950/40 select-none overflow-x-auto scrollbar-hide">
         <button onClick={() => setActiveTab('telegram')} className={tabClass('telegram')}>
-          1. Telegram
+          1. API Setup
         </button>
         <button onClick={() => setActiveTab('vm')} className={tabClass('vm')}>
           2. GCP VM
@@ -53,7 +53,7 @@ export default function DeveloperDocs() {
             <div className="flex items-start gap-3">
               <div className="p-2 rounded bg-emerald-500/10 text-emerald-500 shrink-0">1</div>
               <div>
-                <h4 className="font-bold text-zinc-900 dark:text-zinc-150">Create your bot</h4>
+                <h4 className="font-bold dark:text-zinc-150">Create your bot</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   Open Telegram, search for <code>@BotFather</code>, send <code>/newbot</code>, follow the prompts. Save the bot token.
                 </p>
@@ -63,7 +63,7 @@ export default function DeveloperDocs() {
             <div className="flex items-start gap-3">
               <div className="p-2 rounded bg-emerald-500/10 text-emerald-500 shrink-0">2</div>
               <div>
-                <h4 className="font-bold text-zinc-900 dark:text-zinc-150">Get your chat id</h4>
+                <h4 className="font-bold dark:text-zinc-150">Get your chat id</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   Send any message to your new bot, then message <code>@userinfobot</code> on Telegram. It will reply with your numerical chat id (e.g. <code>542981358</code>).
                 </p>
@@ -73,7 +73,7 @@ export default function DeveloperDocs() {
             <div className="flex items-start gap-3">
               <div className="p-2 rounded bg-emerald-500/10 text-emerald-500 shrink-0">3</div>
               <div>
-                <h4 className="font-bold text-zinc-900 dark:text-zinc-150">Configure the server</h4>
+                <h4 className="font-bold dark:text-zinc-150">Configure the server</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   Put both values in <code>.env</code>:
                 </p>
@@ -83,11 +83,22 @@ TELEGRAM_CHAT_ID=542981358`}
                 </pre>
               </div>
             </div>
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded bg-emerald-500/10 text-emerald-500 shrink-0">4</div>
+              <div>
+                <h4 className="font-bold dark:text-zinc-150">Firebase, Twelve Data & User setup</h4>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Refer to .env.example for the rest of the required environment variables. You will need a Firebase project and a Twelve Data API key for forex/gold prices.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
         {activeTab === 'vm' && (
+
           <div className="space-y-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
+            <h1 className="text-lg font-bold dark:text-zinc-150">This section will be updated soon with a more detailed guide on deploying pipPing on a GCP VM.</h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Deploy on a GCP <strong>e2-micro</strong> in <code>us-west1</code>, <code>us-central1</code>, or <code>us-east1</code> to stay in the Always-Free tier. See <code>DEPLOY.md</code> in the repo for the full step-by-step.
             </p>
@@ -95,7 +106,7 @@ TELEGRAM_CHAT_ID=542981358`}
             <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-900 font-mono text-[11px] text-zinc-600 dark:text-zinc-300 space-y-1">
               <div className="text-emerald-500"># on the VM</div>
               <div>sudo apt install -y nodejs npm git build-essential python3</div>
-              <div>git clone https://github.com/&lt;you&gt;/pipPing /opt/pipping</div>
+              <div>git clone https://github.com/hotokeAtlast/pipPing/opt/pipping</div>
               <div>cd /opt/pipping && npm ci && npm run build</div>
               <div>cp .env.example .env && nano .env</div>
               <div>npm start</div>
@@ -112,7 +123,7 @@ TELEGRAM_CHAT_ID=542981358`}
 
         {activeTab === 'apis' && (
           <div className="space-y-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-            <h4 className="font-bold text-zinc-900 dark:text-zinc-150 flex items-center gap-1.5">
+            <h4 className="font-bold dark:text-zinc-150 flex items-center gap-1.5">
               <Server className="w-4 h-4 text-emerald-500" />
               Price data sources
             </h4>
@@ -121,7 +132,7 @@ TELEGRAM_CHAT_ID=542981358`}
                 <strong>Binance</strong> — public ticker for crypto. No key required, effectively unlimited.
               </li>
               <li>
-                <strong>Twelve Data</strong> — forex and gold. Free tier: <strong>800 calls/day, 8/min</strong>. The backend batches all forex/gold symbols into a single call per poll cycle, and defaults to a 2-min interval (≈720 calls/day).
+                <strong>Twelve Data</strong> — forex and gold. Free tier: <strong>800 REST credits/day, 8 WebSocket trial credits (1 per symbol, no per-message cost)</strong>. EUR/USD + XAU/USD stream over WS (~1s); USD/JPY + AUD/JPY via batch /quote every 4 min (1 credit/call).
               </li>
             </ul>
 

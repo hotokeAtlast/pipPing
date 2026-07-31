@@ -2,7 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets us draw behind the iOS notch / Android camera cutout.
+         Combined with the env(safe-area-inset-*) CSS vars we use below, content
+         stays out of the way of system UI. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0"
+    />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Self-hosted, unlimited price alerts for forex, gold and crypto — pushed to Telegram." />
+
+    <!-- iOS PWA / Add to Home Screen hints -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="pipPing" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
     <title>pipPing</title>
   </head>
   <body>
@@ -10,4 +31,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

@@ -8,10 +8,8 @@ coverage/
 !.env.example
 .env
 .env.local
-
-# SQLite data
+serviceAccountKey.json
 server/data/
 *.db
-*.db-journal
-*.db-wal
 *.db-shm
+*.db-wal

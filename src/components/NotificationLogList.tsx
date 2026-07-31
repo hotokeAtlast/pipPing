@@ -52,14 +52,14 @@ export default function NotificationLogList({ logs, onClearLogs }: NotificationL
           <button
             id="btn-clear-logs"
             onClick={onClearLogs}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-500 hover:text-rose-600 font-semibold border border-rose-500/12 dark:bg-rose-500/5 hover:bg-rose-50 rounded-lg cursor-pointer transition-all self-start sm:self-center"
+            className="flex items-center gap-1 min-h-[36px] px-3 py-2 text-xs text-rose-500 hover:text-rose-600 font-semibold border border-rose-500/20 dark:bg-rose-500/5 dark:hover:bg-rose-500/10 hover:bg-rose-50 rounded-lg cursor-pointer transition-all self-start sm:self-center"
           >
             <Trash2 className="w-3.5 h-3.5" /> Clear History
           </button>
         )}
       </div>
 
-      <div id="logs-container" className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+      <div id="logs-container" className="space-y-2.5 max-h-[60vh] sm:max-h-[420px] overflow-y-auto pr-1 -mr-1 overscroll-contain">
         {logs.length === 0 ? (
           <div id="logs-empty-state" className="text-center py-10 border border-dashed rounded-xl dark:border-zinc-800 dark:bg-zinc-950/20 border-zinc-200 bg-zinc-50/50">
             <Clock id="clock-empty-icon" className="w-7 h-7 text-zinc-300 dark:text-zinc-700 mx-auto mb-2" />

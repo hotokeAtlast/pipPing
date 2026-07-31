@@ -11,7 +11,7 @@ export interface TelegramAlertContext {
   triggerPrice: number;    // the actual price when the alert fired
   direction: 'above' | 'below';
   isTest?: boolean;
-  source?: string;         // "Binance" | "TwelveData WS" etc.
+  source?: string;         // "Binance" | "TwelveData WS" | "TwelveData REST" etc.
   firedAt?: Date;
 }
 

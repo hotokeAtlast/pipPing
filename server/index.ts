@@ -8,9 +8,10 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { initDb } from './db.js';
+import './firebase.js'; // side-effect: initializes Firebase Admin + Firestore
 import { registerRoutes } from './routes.js';
 import { startEngine } from './engine.js';
+import { hydrateFromFirestore } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,8 +20,7 @@ const PORT = Number(process.env.PORT) || 8080;
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 
-const db = initDb();
-registerRoutes(app, db);
+registerRoutes(app);
 
 // In production, serve the built frontend from dist/
 const distPath = path.resolve(__dirname, '..', 'dist');
@@ -35,7 +35,12 @@ if (fs.existsSync(distPath)) {
   console.log('[server] dist/ not found; running API-only (use Vite dev server for UI)');
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`[server] pipPing listening on :${PORT}`);
-  startEngine(db);
+  // Re-hydrate SQLite from Firestore on a cold-start boot (Render free
+  // tier has no persistent disk, so the SQLite file is empty every time
+  // the container restarts). Must finish BEFORE the engine starts so
+  // its first tick has the alert list to evaluate against.
+  await hydrateFromFirestore();
+  startEngine();
 });

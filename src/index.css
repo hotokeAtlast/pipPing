@@ -1,1 +1,120 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------
+   pipPing global styles
+   - safe-area helpers for notched phones (iPhone X+, modern Android)
+   - consistent focus rings for keyboard / a11y
+   - tap-action: manipulation removes the 300 ms double-tap delay
+   - smooth scrolling
+   ------------------------------------------------------------------ */
+
+@layer base {
+  html {
+    /* smooth scroll for in-page navigation; respects user prefs via
+       Tailwind's motion-safe utilities where used. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Belt-and-suspenders: even if some descendant creates a wider
+       element, the html scrollbar is suppressed so the page never
+       shows that "empty strip" on the right of mobile. */
+    overflow-x: hidden;
+    /* Avoid the iOS rubber-band scroll on the page itself. */
+    overscroll-behavior-y: none;
+  }
+
+  /* Intentionally NO body styles. Previously we had
+       body { min-height: 100dvh; overflow-x: hidden; overscroll-behavior-y: none }
+     but `overflow-x: hidden` on the body implicitly sets
+     `overflow-y: auto`, which turns the body into a second scroll
+     container stacked under the html. On Chrome/Edge this swallows
+     mouse-wheel events — the page no longer scrolls normally outside
+     the chart modal. The min-height / overflow-x live on the
+     Dashboard and AuthGate roots instead. */
+
+  /* Universal focus ring for keyboard users. We don't apply it on
+     :focus because that catches mouse clicks — only :focus-visible. */
+  :focus-visible {
+    outline: 2px solid rgb(16 185 129); /* emerald-500 */
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Buttons & interactive elements: kill the 300ms tap delay. */
+  button,
+  [role='button'],
+  a {
+    touch-action: manipulation;
+  }
+
+  /* Number inputs: hide the spinner on Firefox so they don't crowd
+     the form on small screens. */
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Date inputs on iOS respect the design system. */
+  input[type='date'],
+  input[type='time'] {
+    font-family: inherit;
+  }
+
+  /* Smooth scroll where motion is allowed. */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+@layer utilities {
+  /* Safe-area insets (notch / home indicator) — drop into any
+     padding / margin utility. */
+  .pt-safe    { padding-top:    max(0.5rem, env(safe-area-inset-top)); }
+  .pb-safe    { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+  .pl-safe    { padding-left:   max(0.5rem, env(safe-area-inset-left)); }
+  .pr-safe    { padding-right:  max(0.5rem, env(safe-area-inset-right)); }
+  .px-safe    { padding-left:   max(0.5rem, env(safe-area-inset-left));
+                padding-right:  max(0.5rem, env(safe-area-inset-right)); }
+  .py-safe    { padding-top:    max(0.5rem, env(safe-area-inset-top));
+                padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+  .p-safe     { padding:        max(0.5rem, env(safe-area-inset-top))
+                              max(0.5rem, env(safe-area-inset-right))
+                              max(0.5rem, env(safe-area-inset-bottom))
+                              max(0.5rem, env(safe-area-inset-left)); }
+
+  .mt-safe    { margin-top:     env(safe-area-inset-top); }
+  .mb-safe    { margin-bottom:  env(safe-area-inset-bottom); }
+  .ml-safe    { margin-left:    env(safe-area-inset-left); }
+  .mr-safe    { margin-right:   env(safe-area-inset-right); }
+
+  /* For fixed-position elements (toasts, modals) — use these
+     insets directly so they always sit above the home indicator. */
+  .inset-bottom-safe {
+    bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .inset-top-safe {
+    top: max(1rem, env(safe-area-inset-top));
+  }
+
+  /* Hide scrollbars on horizontal tab strips etc. */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Minimum recommended touch target (44pt iOS / 48dp Material). */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
